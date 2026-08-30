@@ -138,7 +138,10 @@ Override with `SF_MCP_AUDIT_DIR`:
   "mcpServers": {
     "screaming-frog": {
       "command": "uvx",
-      "args": ["screaming-frog-mcp"],
+      "args": [
+        "--from", "git+https://github.com/mshahiddigital/screaming-frog-mcp",
+        "screaming-frog-mcp"
+      ],
       "env": { "SF_MCP_AUDIT_DIR": "/Users/you/audits" }
     }
   }
