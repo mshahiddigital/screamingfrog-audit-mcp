@@ -1,6 +1,6 @@
 # screamingfrog-audit-mcp
 
-[![CI](https://github.com/mshahiddigital/screamingfrog-audit-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/mshahiddigital/screamingfrog-audit-mcp/actions/workflows/ci.yml) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/) [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![CI](https://github.com/mshahiddigital/screamingfrog-audit-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/mshahiddigital/screamingfrog-audit-mcp/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/screamingfrog-audit-mcp)](https://pypi.org/project/screamingfrog-audit-mcp/) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/) [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Drive the [Screaming Frog SEO Spider](https://www.screamingfrog.co.uk/seo-spider/)
 from Claude, Cursor, or any other MCP client. Crawl a site, get a ranked issue
@@ -43,8 +43,7 @@ The free version is fine.
 ### Claude Code
 
 ```bash
-claude mcp add screaming-frog -- \
-  uvx --from git+https://github.com/mshahiddigital/screamingfrog-audit-mcp screamingfrog-audit-mcp
+claude mcp add screaming-frog -- uvx screamingfrog-audit-mcp
 ```
 
 ### Claude Desktop, Cursor, or any client with a JSON config
@@ -54,10 +53,7 @@ claude mcp add screaming-frog -- \
   "mcpServers": {
     "screaming-frog": {
       "command": "uvx",
-      "args": [
-        "--from", "git+https://github.com/mshahiddigital/screamingfrog-audit-mcp",
-        "screamingfrog-audit-mcp"
-      ]
+      "args": ["screamingfrog-audit-mcp"]
     }
   }
 }
@@ -77,7 +73,7 @@ Restart the client after editing. `uvx` comes with
 ### Prefer pip
 
 ```bash
-pip install git+https://github.com/mshahiddigital/screamingfrog-audit-mcp
+pip install screamingfrog-audit-mcp
 ```
 
 Then use `"command": "screamingfrog-audit-mcp"` with `"args": []`.
@@ -108,11 +104,7 @@ writable — then prints a client config matching how this copy was installed.
     or set SCREAMING_FROG_PATH to the executable.
 ```
 
-Running from `uvx`? Use
-`uvx --from git+https://github.com/mshahiddigital/screamingfrog-audit-mcp screamingfrog-audit-mcp --doctor`.
-
-> **Not on PyPI yet.** Once it is published, the above shortens to
-> `uvx screamingfrog-audit-mcp`.
+Running from `uvx`? Use `uvx screamingfrog-audit-mcp --doctor`.
 
 ## The free-tier situation
 
@@ -175,10 +167,7 @@ Override with `SF_MCP_AUDIT_DIR`:
   "mcpServers": {
     "screaming-frog": {
       "command": "uvx",
-      "args": [
-        "--from", "git+https://github.com/mshahiddigital/screamingfrog-audit-mcp",
-        "screamingfrog-audit-mcp"
-      ],
+      "args": ["screamingfrog-audit-mcp"],
       "env": { "SF_MCP_AUDIT_DIR": "/Users/you/audits" }
     }
   }
