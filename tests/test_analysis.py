@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from screaming_frog_mcp import analysis, report
+from screamingfrog_audit_mcp import analysis, report
 
 INTERNAL_COLUMNS = [
     "Address", "Content Type", "Status Code", "Indexability",
@@ -222,7 +222,7 @@ def test_report_rebuilds_stale_summary_without_health(crawl):
 
 # ── expert-mode tier logic ───────────────────────────────────────────────────
 
-from screaming_frog_mcp import crawler  # noqa: E402
+from screamingfrog_audit_mcp import crawler  # noqa: E402
 
 
 def test_expert_mode_excludes_api_groups_on_free():
@@ -278,7 +278,7 @@ def test_server_imports_and_registers_every_tool():
     """Guards the SDK rename: mcp 2.0 moved FastMCP to MCPServer, and a fresh
     `pip install mcp` now resolves to 2.x. Importing under whichever major is
     present must work, or every new install crashes on startup."""
-    from screaming_frog_mcp import server as srv
+    from screamingfrog_audit_mcp import server as srv
 
     assert srv.server is not None
     for name in ("check_install", "available_filters", "start_crawl",
@@ -291,7 +291,7 @@ def test_server_module_does_not_shadow_the_mcp_package():
     """`mcp = FastMCP(...)` would rebind the package name inside the module."""
     import mcp as sdk
 
-    from screaming_frog_mcp import server as srv
+    from screamingfrog_audit_mcp import server as srv
     assert getattr(srv, "mcp", sdk) is sdk
 
 
@@ -301,7 +301,7 @@ def test_windows_liveness_never_calls_os_kill(monkeypatch, tmp_path):
     """On Windows, os.kill with any signal but CTRL_C/CTRL_BREAK routes to
     TerminateProcess. Using it as a liveness probe would kill the crawl and
     then report it finished."""
-    from screaming_frog_mcp import jobs as J
+    from screamingfrog_audit_mcp import jobs as J
 
     monkeypatch.setattr(J.sys, "platform", "win32")
 
@@ -317,7 +317,7 @@ def test_windows_liveness_never_calls_os_kill(monkeypatch, tmp_path):
 
 
 def test_windows_liveness_reports_dead_when_pid_absent(monkeypatch, tmp_path):
-    from screaming_frog_mcp import jobs as J
+    from screamingfrog_audit_mcp import jobs as J
 
     monkeypatch.setattr(J.sys, "platform", "win32")
     monkeypatch.setattr(J.subprocess, "run",
@@ -329,7 +329,7 @@ def test_windows_liveness_reports_dead_when_pid_absent(monkeypatch, tmp_path):
 
 def test_windows_cancel_uses_taskkill_not_killpg(monkeypatch, tmp_path):
     """os.killpg and os.getpgid do not exist on Windows at all."""
-    from screaming_frog_mcp import jobs as J
+    from screamingfrog_audit_mcp import jobs as J
 
     monkeypatch.setattr(J.sys, "platform", "win32")
     monkeypatch.setattr(J.os, "kill", lambda *a, **k: (_ for _ in ()).throw(
@@ -348,7 +348,7 @@ def test_windows_cancel_uses_taskkill_not_killpg(monkeypatch, tmp_path):
 
 def test_posix_liveness_treats_a_zombie_as_finished(monkeypatch, tmp_path):
     """The original bug: a reaped-less child polls 'running' forever."""
-    from screaming_frog_mcp import jobs as J
+    from screamingfrog_audit_mcp import jobs as J
 
     monkeypatch.setattr(J.sys, "platform", "darwin")
     monkeypatch.setattr(J.os, "kill", lambda *a, **k: None)
@@ -364,9 +364,9 @@ def test_no_subprocess_decodes_with_the_locale_encoding():
     import re
     from pathlib import Path
 
-    import screaming_frog_mcp
+    import screamingfrog_audit_mcp
 
-    src = Path(screaming_frog_mcp.__file__).parent
+    src = Path(screamingfrog_audit_mcp.__file__).parent
     offenders = []
     for f in src.glob("*.py"):
         text = f.read_text(encoding="utf-8")
@@ -379,7 +379,7 @@ def test_no_subprocess_decodes_with_the_locale_encoding():
 # ── doctor ───────────────────────────────────────────────────────────────────
 
 def test_doctor_fails_when_the_spider_is_missing(monkeypatch, capsys, tmp_path):
-    from screaming_frog_mcp import doctor as doc
+    from screamingfrog_audit_mcp import doctor as doc
 
     monkeypatch.setenv("SCREAMING_FROG_PATH", str(tmp_path / "nope"))
     monkeypatch.setenv("SF_MCP_AUDIT_DIR", str(tmp_path / "audits"))
@@ -391,7 +391,7 @@ def test_doctor_fails_when_the_spider_is_missing(monkeypatch, capsys, tmp_path):
 
 
 def test_doctor_passes_and_prints_a_usable_config(monkeypatch, capsys, tmp_path):
-    from screaming_frog_mcp import doctor as doc
+    from screamingfrog_audit_mcp import doctor as doc
 
     fake = tmp_path / "spider"
     fake.write_text("#!/bin/sh\n", encoding="utf-8")
@@ -409,7 +409,7 @@ def test_doctor_passes_and_prints_a_usable_config(monkeypatch, capsys, tmp_path)
 def test_doctor_treats_the_free_tier_as_a_warning_not_a_failure(monkeypatch, tmp_path):
     """The free tier is fully supported; flagging it as a failure would send
     people off to buy a licence they do not need."""
-    from screaming_frog_mcp import doctor as doc
+    from screamingfrog_audit_mcp import doctor as doc
 
     monkeypatch.setattr(doc, "is_licensed", lambda: False)
     status, _, hint = doc._check_licence()

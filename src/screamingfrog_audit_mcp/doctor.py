@@ -1,4 +1,4 @@
-"""Preflight diagnostics: `screaming-frog-mcp --doctor`.
+"""Preflight diagnostics: `screamingfrog-audit-mcp --doctor`.
 
 An MCP server talks over stdio, so when it fails to start the user sees
 nothing useful — the client just reports a dead server with no reason. This
@@ -26,7 +26,7 @@ ENV_AUDIT_DIR = "SF_MCP_AUDIT_DIR"
 
 def _default_audit_root() -> Path:
     return Path(
-        os.environ.get(ENV_AUDIT_DIR) or (Path.home() / ".screaming-frog-mcp" / "audits")
+        os.environ.get(ENV_AUDIT_DIR) or (Path.home() / ".screamingfrog-audit-mcp" / "audits")
     ).expanduser()
 
 
@@ -129,10 +129,10 @@ def _check_audit_dir() -> tuple[str, str, str]:
 
 def _client_config() -> str:
     """The exact snippet to paste, matching how this copy was installed."""
-    if Path(sys.argv[0]).name.startswith("screaming-frog-mcp"):
+    if Path(sys.argv[0]).name.startswith("screamingfrog-audit-mcp"):
         command, args = sys.argv[0], []
     else:
-        command, args = sys.executable, ["-m", "screaming_frog_mcp"]
+        command, args = sys.executable, ["-m", "screamingfrog_audit_mcp"]
     arg_lines = "".join(f'\n        "{a}",' for a in args).rstrip(",")
     return (
         '{\n'
@@ -156,7 +156,7 @@ def run() -> int:
         ("Audit folder", _check_audit_dir),
     ]
 
-    print(f"screaming-frog-mcp {__version__} — preflight check\n")
+    print(f"screamingfrog-audit-mcp {__version__} — preflight check\n")
     failures = 0
     for label, fn in checks:
         status, message, hint = fn()

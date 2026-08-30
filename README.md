@@ -1,14 +1,27 @@
-# screaming-frog-mcp
+# screamingfrog-audit-mcp
 
-[![CI](https://github.com/mshahiddigital/screaming-frog-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/mshahiddigital/screaming-frog-mcp/actions/workflows/ci.yml) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/) [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![CI](https://github.com/mshahiddigital/screamingfrog-audit-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/mshahiddigital/screamingfrog-audit-mcp/actions/workflows/ci.yml) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/) [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Drive the [Screaming Frog SEO Spider](https://www.screamingfrog.co.uk/seo-spider/)
 from Claude, Cursor, or any other MCP client. Crawl a site, get a ranked issue
 register back, ask questions of the crawl data, and render a shareable report —
 without opening the GUI or writing a single command.
 
-**It works on the free, unlicensed SEO Spider.** More on that below, because
-almost everyone assumes it doesn't.
+### It works on the free, unlicensed SEO Spider
+
+That is the point of this server, and it is unusual: the other MCP servers for
+Screaming Frog build on its saved-crawl database, which is a licensed feature,
+so they need a paid install. This one drives the crawl directly and never
+touches that database.
+
+The free tier caps you at 500 URLs **per invocation** — not per site. So
+`full=true` reads `robots.txt` and the sitemaps, splits the URLs into batches
+under the cap, runs each through list mode, and merges the exports. A
+3,000-page site audits completely on a free install.
+
+A licence removes the cap and unlocks `config=` for JavaScript rendering and
+custom extraction. Both tiers are supported and the server adapts to whichever
+you have.
 
 ```
 You:  Crawl example.com and tell me what's actually broken.
@@ -31,7 +44,7 @@ The free version is fine.
 
 ```bash
 claude mcp add screaming-frog -- \
-  uvx --from git+https://github.com/mshahiddigital/screaming-frog-mcp screaming-frog-mcp
+  uvx --from git+https://github.com/mshahiddigital/screamingfrog-audit-mcp screamingfrog-audit-mcp
 ```
 
 ### Claude Desktop, Cursor, or any client with a JSON config
@@ -42,8 +55,8 @@ claude mcp add screaming-frog -- \
     "screaming-frog": {
       "command": "uvx",
       "args": [
-        "--from", "git+https://github.com/mshahiddigital/screaming-frog-mcp",
-        "screaming-frog-mcp"
+        "--from", "git+https://github.com/mshahiddigital/screamingfrog-audit-mcp",
+        "screamingfrog-audit-mcp"
       ]
     }
   }
@@ -64,10 +77,10 @@ Restart the client after editing. `uvx` comes with
 ### Prefer pip
 
 ```bash
-pip install git+https://github.com/mshahiddigital/screaming-frog-mcp
+pip install git+https://github.com/mshahiddigital/screamingfrog-audit-mcp
 ```
 
-Then use `"command": "screaming-frog-mcp"` with `"args": []`.
+Then use `"command": "screamingfrog-audit-mcp"` with `"args": []`.
 
 ### First run
 
@@ -80,7 +93,7 @@ An MCP server talks over stdio, so a startup failure shows up in your client as
 a dead server with no reason given. Run the preflight in a terminal instead:
 
 ```bash
-screaming-frog-mcp --doctor
+screamingfrog-audit-mcp --doctor
 ```
 
 It checks your Python version, the MCP SDK, whether the SEO Spider is found
@@ -96,10 +109,10 @@ writable — then prints a client config matching how this copy was installed.
 ```
 
 Running from `uvx`? Use
-`uvx --from git+https://github.com/mshahiddigital/screaming-frog-mcp screaming-frog-mcp --doctor`.
+`uvx --from git+https://github.com/mshahiddigital/screamingfrog-audit-mcp screamingfrog-audit-mcp --doctor`.
 
 > **Not on PyPI yet.** Once it is published, the above shortens to
-> `uvx screaming-frog-mcp`.
+> `uvx screamingfrog-audit-mcp`.
 
 ## The free-tier situation
 
@@ -151,7 +164,7 @@ caps at 500 rows, lets you pick columns, and truncates long cells. Ask
 
 ## Where crawls are stored
 
-`~/.screaming-frog-mcp/audits/<label>/` by default. Each folder holds the raw
+`~/.screamingfrog-audit-mcp/audits/<label>/` by default. Each folder holds the raw
 Screaming Frog CSV exports, `audit-summary.json`, and whatever
 `build_report` wrote.
 
@@ -163,8 +176,8 @@ Override with `SF_MCP_AUDIT_DIR`:
     "screaming-frog": {
       "command": "uvx",
       "args": [
-        "--from", "git+https://github.com/mshahiddigital/screaming-frog-mcp",
-        "screaming-frog-mcp"
+        "--from", "git+https://github.com/mshahiddigital/screamingfrog-audit-mcp",
+        "screamingfrog-audit-mcp"
       ],
       "env": { "SF_MCP_AUDIT_DIR": "/Users/you/audits" }
     }
@@ -179,8 +192,8 @@ Set `SCREAMING_FROG_PATH` if the Spider is installed somewhere non-standard.
 The crawl pipeline is a plain module:
 
 ```bash
-python -m screaming_frog_mcp.runner --url https://example.com --output ./audit
-python -m screaming_frog_mcp.runner --url https://example.com --output ./audit --full
+python -m screamingfrog_audit_mcp.runner --url https://example.com --output ./audit
+python -m screamingfrog_audit_mcp.runner --url https://example.com --output ./audit --full
 ```
 
 ## Gotchas found the hard way
@@ -206,8 +219,8 @@ python -m screaming_frog_mcp.runner --url https://example.com --output ./audit -
 ## Development
 
 ```bash
-git clone https://github.com/mshahiddigital/screaming-frog-mcp
-cd screaming-frog-mcp
+git clone https://github.com/mshahiddigital/screamingfrog-audit-mcp
+cd screamingfrog-audit-mcp
 pip install -e ".[dev]"
 pytest
 ```

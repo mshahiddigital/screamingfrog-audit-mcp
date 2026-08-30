@@ -45,7 +45,7 @@ from .report import build as build_report_files
 ENV_AUDIT_DIR = "SF_MCP_AUDIT_DIR"
 
 AUDIT_ROOT = Path(
-    os.environ.get(ENV_AUDIT_DIR) or (Path.home() / ".screaming-frog-mcp" / "audits")
+    os.environ.get(ENV_AUDIT_DIR) or (Path.home() / ".screamingfrog-audit-mcp" / "audits")
 ).expanduser()
 
 MAX_ROWS = 500      # hard ceiling on any row-returning tool
@@ -509,9 +509,9 @@ def main() -> None:
         from .doctor import run
         raise SystemExit(run())
     if {"-h", "--help"} & set(sys.argv[1:]):
-        print("screaming-frog-mcp — MCP server for the Screaming Frog SEO Spider\n")
-        print("  screaming-frog-mcp            run the server (stdio, for MCP clients)")
-        print("  screaming-frog-mcp --doctor   check this machine and print a client config")
+        print("screamingfrog-audit-mcp — MCP server for the Screaming Frog SEO Spider\n")
+        print("  screamingfrog-audit-mcp            run the server (stdio, for MCP clients)")
+        print("  screamingfrog-audit-mcp --doctor   check this machine and print a client config")
         raise SystemExit(0)
 
     AUDIT_ROOT.mkdir(parents=True, exist_ok=True)
