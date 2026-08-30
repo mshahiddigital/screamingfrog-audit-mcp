@@ -374,3 +374,44 @@ def test_no_subprocess_decodes_with_the_locale_encoding():
             if "text=True" in call and "encoding=" not in call:
                 offenders.append(f"{f.name}: {' '.join(call.split())[:90]}")
     assert not offenders, "unpinned decode: " + "; ".join(offenders)
+
+
+# ── doctor ───────────────────────────────────────────────────────────────────
+
+def test_doctor_fails_when_the_spider_is_missing(monkeypatch, capsys, tmp_path):
+    from screaming_frog_mcp import doctor as doc
+
+    monkeypatch.setenv("SCREAMING_FROG_PATH", str(tmp_path / "nope"))
+    monkeypatch.setenv("SF_MCP_AUDIT_DIR", str(tmp_path / "audits"))
+    assert doc.run() == 1
+    out = capsys.readouterr().out
+    assert "[FAIL]" in out
+    assert "screamingfrog.co.uk" in out          # tells them where to get it
+    assert "Looked in" in out                    # and where it searched
+
+
+def test_doctor_passes_and_prints_a_usable_config(monkeypatch, capsys, tmp_path):
+    from screaming_frog_mcp import doctor as doc
+
+    fake = tmp_path / "spider"
+    fake.write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setenv("SCREAMING_FROG_PATH", str(fake))
+    monkeypatch.setenv("SF_MCP_AUDIT_DIR", str(tmp_path / "audits"))
+    monkeypatch.setattr(doc, "_check_binary_runs",
+                        lambda: (doc.PASS, "Binary responds: 900 export filters", ""))
+    assert doc.run() == 0
+    out = capsys.readouterr().out
+    assert "All checks passed" in out
+    assert '"mcpServers"' in out
+    assert "[FAIL]" not in out
+
+
+def test_doctor_treats_the_free_tier_as_a_warning_not_a_failure(monkeypatch, tmp_path):
+    """The free tier is fully supported; flagging it as a failure would send
+    people off to buy a licence they do not need."""
+    from screaming_frog_mcp import doctor as doc
+
+    monkeypatch.setattr(doc, "is_licensed", lambda: False)
+    status, _, hint = doc._check_licence()
+    assert status == doc.WARN
+    assert "fully supported" in hint

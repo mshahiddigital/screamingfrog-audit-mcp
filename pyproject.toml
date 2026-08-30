@@ -29,6 +29,7 @@ dev = ["pytest>=7.0"]
 
 [project.scripts]
 screaming-frog-mcp = "screaming_frog_mcp.server:main"
+screaming-frog-mcp-doctor = "screaming_frog_mcp.doctor:run"
 
 [project.urls]
 Homepage = "https://github.com/mshahiddigital/screaming-frog-mcp"

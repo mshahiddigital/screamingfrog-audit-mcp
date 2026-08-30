@@ -70,9 +70,31 @@ Then use `"command": "screaming-frog-mcp"` with `"args": []`.
 ### First run
 
 Ask your client: **"check my screaming frog install"**. It calls `check_install`,
-which reports the binary it found, your tier, and what that tier can do. If the
-Spider isn't found, the answer includes every path it looked in and how to point
-at yours.
+which reports the binary it found, your tier, and what that tier can do.
+
+### If the server won't start
+
+An MCP server talks over stdio, so a startup failure shows up in your client as
+a dead server with no reason given. Run the preflight in a terminal instead:
+
+```bash
+screaming-frog-mcp --doctor
+```
+
+It checks your Python version, the MCP SDK, whether the SEO Spider is found
+*and actually runs*, your licence tier, and whether the audit folder is
+writable — then prints a client config matching how this copy was installed.
+
+```
+  [PASS] Python: Python 3.12.7 on Darwin
+  [PASS] MCP SDK: MCP SDK 2.1.1, using MCPServer (mcp 2.x)
+  [FAIL] SEO Spider: Screaming Frog SEO Spider not found
+    Install it from https://www.screamingfrog.co.uk/seo-spider/ ,
+    or set SCREAMING_FROG_PATH to the executable.
+```
+
+Running from `uvx`? Use
+`uvx --from git+https://github.com/mshahiddigital/screaming-frog-mcp screaming-frog-mcp --doctor`.
 
 > **Not on PyPI yet.** Once it is published, the above shortens to
 > `uvx screaming-frog-mcp`.

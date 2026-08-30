@@ -20,6 +20,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -501,6 +502,18 @@ def build_report(crawl: str, label: str = "") -> dict:
 
 
 def main() -> None:
+    # --doctor runs the same checks in a normal terminal. An MCP server speaks
+    # stdio, so a startup failure is invisible in the client; this is the only
+    # way a user can see why.
+    if "--doctor" in sys.argv[1:]:
+        from .doctor import run
+        raise SystemExit(run())
+    if {"-h", "--help"} & set(sys.argv[1:]):
+        print("screaming-frog-mcp — MCP server for the Screaming Frog SEO Spider\n")
+        print("  screaming-frog-mcp            run the server (stdio, for MCP clients)")
+        print("  screaming-frog-mcp --doctor   check this machine and print a client config")
+        raise SystemExit(0)
+
     AUDIT_ROOT.mkdir(parents=True, exist_ok=True)
     server.run()
 
