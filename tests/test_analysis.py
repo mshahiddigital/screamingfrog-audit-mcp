@@ -1,0 +1,272 @@
+"""Tests that run without Screaming Frog installed.
+
+Everything here works off synthetic export CSVs, so the parsing, scoring and
+derived analysis are verified on a machine that has never seen the SEO Spider.
+"""
+
+import csv
+import json
+from pathlib import Path
+
+import pytest
+
+from screaming_frog_mcp import analysis, report
+
+INTERNAL_COLUMNS = [
+    "Address", "Content Type", "Status Code", "Indexability",
+    "Indexability Status", "Title 1", "H1-1", "Word Count", "Crawl Depth",
+    "Link Score", "Unique Inlinks", "Response Time", "Size (Bytes)",
+]
+
+
+def _write(path: Path, columns: list[str], rows: list[dict]) -> None:
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=columns)
+        w.writeheader()
+        for r in rows:
+            w.writerow({c: r.get(c, "") for c in columns})
+
+
+@pytest.fixture
+def crawl(tmp_path: Path) -> Path:
+    rows = [
+        # a healthy top-level page
+        {"Address": "https://example.com/", "Content Type": "text/html",
+         "Status Code": "200", "Indexability": "Indexable", "Title 1": "Home",
+         "H1-1": "Home", "Word Count": "900", "Crawl Depth": "0",
+         "Link Score": "100", "Unique Inlinks": "12", "Response Time": "0.21",
+         "Size (Bytes)": "45000"},
+        # duplicate title AND h1 with the next one
+        {"Address": "https://example.com/a", "Content Type": "text/html",
+         "Status Code": "200", "Indexability": "Indexable", "Title 1": "Services",
+         "H1-1": "Services", "Word Count": "120", "Crawl Depth": "2",
+         "Link Score": "40", "Unique Inlinks": "3", "Response Time": "0.4",
+         "Size (Bytes)": "30000"},
+        {"Address": "https://example.com/b", "Content Type": "text/html",
+         "Status Code": "200", "Indexability": "Indexable", "Title 1": "Services",
+         "H1-1": "Services", "Word Count": "80", "Crawl Depth": "5",
+         "Link Score": "3", "Unique Inlinks": "0", "Response Time": "2.5",
+         "Size (Bytes)": "3000000"},
+        # non-indexable, and not in the sitemap
+        {"Address": "https://example.com/c", "Content Type": "text/html",
+         "Status Code": "200", "Indexability": "Non-Indexable",
+         "Indexability Status": "Noindex", "Title 1": "Hidden", "H1-1": "Hidden",
+         "Word Count": "1500", "Crawl Depth": "3", "Link Score": "20",
+         "Unique Inlinks": "1", "Response Time": "0.3", "Size (Bytes)": "50000"},
+    ]
+    _write(tmp_path / "internal_all.csv", INTERNAL_COLUMNS, rows)
+    _write(tmp_path / "internal_html.csv", INTERNAL_COLUMNS, rows)
+
+    _write(tmp_path / "sitemaps_all.csv", ["Address"], [
+        {"Address": "https://example.com/"},
+        {"Address": "https://example.com/a"},
+        {"Address": "https://example.com/c"},   # listed but non-indexable
+    ])
+
+    _write(tmp_path / "issues_overview_report.csv",
+           ["Issue Name", "Issue Type", "Issue Priority", "URLs", "% of Total",
+            "Description", "How To Fix"],
+           [
+               {"Issue Name": "Low priority thing", "Issue Type": "Opportunity",
+                "Issue Priority": "Low", "URLs": "9", "% of Total": "20.0",
+                "Description": "d", "How To Fix": "f"},
+               {"Issue Name": "Broken pages", "Issue Type": "Issue",
+                "Issue Priority": "High", "URLs": "3", "% of Total": "10.0",
+                "Description": "d", "How To Fix": "Fix the links."},
+               {"Issue Name": "Duplicate titles", "Issue Type": "Warning",
+                "Issue Priority": "Medium", "URLs": "2", "% of Total": "5.0",
+                "Description": "d", "How To Fix": "Rewrite them."},
+           ])
+    return tmp_path
+
+
+# ── issue register ───────────────────────────────────────────────────────────
+
+def test_issues_rank_high_first_regardless_of_file_order(crawl):
+    issues = analysis.read_issues(crawl)
+    assert [i["priority"] for i in issues] == ["High", "Medium", "Low"]
+    assert issues[0]["issue"] == "Broken pages"
+
+
+def test_health_score_weights_priority_over_volume():
+    """Forty cosmetic opportunities must not outrank one real defect."""
+    one_defect = analysis.health_score(
+        [{"priority": "High", "type": "Issue"}])
+    many_cosmetic = analysis.health_score(
+        [{"priority": "Low", "type": "Opportunity"}] * 20)
+    assert one_defect["score"] < many_cosmetic["score"]
+    assert "formula" in one_defect
+
+
+def test_health_score_is_clamped():
+    assert analysis.health_score([]) ["score"] == 100
+    flood = [{"priority": "High", "type": "Issue"}] * 500
+    assert analysis.health_score(flood)["score"] == 0
+
+
+def test_summarize_writes_and_counts(crawl):
+    s = analysis.summarize(crawl, "https://example.com")
+    assert (crawl / "audit-summary.json").exists()
+    assert s["stats"]["urls"] == 4
+    assert s["stats"]["indexable"] == 3
+    assert s["stats"]["non_indexable"] == 1
+    assert s["counts"] == {"high": 1, "medium": 1, "low": 1, "total_types": 3}
+
+
+# ── derived analysis ─────────────────────────────────────────────────────────
+
+def test_depth_flags_only_pages_past_three(crawl):
+    d = analysis.full_analysis(crawl)["depth"]
+    assert d["max_depth"] == 5
+    assert d["pages_deeper_than_3"] == 1
+    assert d["deepest"][0]["url"].endswith("/b")
+
+
+def test_link_equity_finds_the_starved_page(crawl):
+    le = analysis.full_analysis(crawl)["link_equity"]
+    assert le["no_internal_inlinks"] == 1
+    assert le["least_linked"][0]["unique_inlinks"] == 0
+
+
+def test_sitemap_reconciles_both_directions(crawl):
+    sm = analysis.full_analysis(crawl)["sitemap"]
+    assert sm["available"] is True
+    # /c is listed but non-indexable
+    assert sm["in_sitemap_but_not_indexable"] == 1
+    # /b is indexable but absent from the sitemap
+    assert "https://example.com/b" in sm["examples_missing"]
+
+
+def test_sitemap_degrades_when_absent(tmp_path):
+    _write(tmp_path / "internal_all.csv", INTERNAL_COLUMNS, [])
+    sm = analysis.full_analysis(tmp_path)["sitemap"]
+    assert sm["available"] is False
+
+
+def test_content_thin_pages(crawl):
+    ct = analysis.full_analysis(crawl)["content"]
+    assert ct["thin_pages"] == 2          # 120 and 80 words
+    assert ct["thinnest"][0]["words"] == 80
+
+
+def test_performance_outliers(crawl):
+    perf = analysis.full_analysis(crawl)["performance"]
+    assert perf["slow_pages"] == 1
+    assert perf["heavy_pages"] == 1
+    assert perf["slowest"][0]["seconds"] == 2.5
+
+
+def test_indexability_reasons(crawl):
+    ix = analysis.full_analysis(crawl)["indexability"]
+    assert ix["indexable"] == 3
+    assert ix["reasons"] == {"Noindex": 1}
+
+
+def test_duplication_groups(crawl):
+    dup = analysis.full_analysis(crawl)["duplication"]
+    assert dup["duplicate_title_groups"] == 1
+    assert dup["worst_titles"][0]["count"] == 2
+
+
+def test_analysis_survives_missing_and_junk_values(tmp_path):
+    """A real export has blanks and non-numeric cells; none may raise."""
+    _write(tmp_path / "internal_all.csv", INTERNAL_COLUMNS, [
+        {"Address": "https://example.com/", "Content Type": "text/html",
+         "Word Count": "", "Crawl Depth": "n/a", "Unique Inlinks": None,
+         "Response Time": "", "Size (Bytes)": "1,024"},
+    ])
+    result = analysis.full_analysis(tmp_path)
+    assert set(result) == {"depth", "link_equity", "sitemap", "content",
+                           "performance", "indexability", "duplication"}
+
+
+# ── report ───────────────────────────────────────────────────────────────────
+
+def test_report_writes_all_three_files(crawl):
+    out = report.build(crawl, "Example Co")
+    for key in ("markdown", "html", "analysis_json"):
+        assert Path(out[key]).exists()
+    assert out["health"]["score"] <= 100
+
+
+def test_report_html_escapes_hostile_content(tmp_path):
+    """Crawl data is attacker-controllable; it must never become markup."""
+    _write(tmp_path / "internal_all.csv", INTERNAL_COLUMNS, [
+        {"Address": "https://example.com/<script>alert(1)</script>",
+         "Content Type": "text/html", "Indexability": "Indexable",
+         "Title 1": "<img src=x onerror=alert(1)>", "H1-1": "x",
+         "Word Count": "50", "Crawl Depth": "1", "Unique Inlinks": "1",
+         "Response Time": "0.1", "Size (Bytes)": "100"},
+    ])
+    _write(tmp_path / "issues_overview_report.csv",
+           ["Issue Name", "Issue Type", "Issue Priority", "URLs", "% of Total",
+            "Description", "How To Fix"],
+           [{"Issue Name": "<b>bold</b>", "Issue Type": "Issue",
+             "Issue Priority": "High", "URLs": "1", "% of Total": "100",
+             "Description": "d", "How To Fix": "<script>x</script>"}])
+    out = report.build(tmp_path, "Example")
+    page = Path(out["html"]).read_text(encoding="utf-8")
+    assert "<script>alert(1)</script>" not in page
+    assert "onerror=alert(1)" not in page
+    assert "&lt;script&gt;" in page
+
+
+def test_report_rebuilds_stale_summary_without_health(crawl):
+    """A summary written by an older version lacks 'health'; it must be
+    regenerated rather than crashing the report."""
+    stale = {"site": "https://example.com", "stats": {}, "counts": {}, "issues": []}
+    (crawl / "audit-summary.json").write_text(json.dumps(stale), encoding="utf-8")
+    out = report.build(crawl)
+    assert out["health"]["score"] > 0
+
+
+# ── expert-mode tier logic ───────────────────────────────────────────────────
+
+from screaming_frog_mcp import crawler  # noqa: E402
+
+
+def test_expert_mode_excludes_api_groups_on_free():
+    excluded = crawler._expert_excluded(licensed=False, has_config=False)
+    assert "Search Console" in excluded
+    assert "PageSpeed" in excluded
+    assert "Custom Extraction" in excluded
+    assert "UNDEF" in excluded
+
+
+def test_expert_mode_includes_api_groups_once_licensed():
+    excluded = crawler._expert_excluded(licensed=True, has_config=False)
+    assert "Search Console" not in excluded
+    assert "Change Detection" not in excluded
+    # still excluded: these only fill in from a config file
+    assert "Custom Search" in excluded
+
+
+def test_config_unlocks_the_custom_groups():
+    excluded = crawler._expert_excluded(licensed=True, has_config=True)
+    assert not (excluded - {"UNDEF"})
+
+
+def test_export_args_passes_config_through(tmp_path, monkeypatch):
+    monkeypatch.setattr(crawler, "accepted_names", lambda kind: set())
+    cfg = tmp_path / "my.seospiderconfig"
+    cfg.write_text("x", encoding="utf-8")
+    args = crawler.export_args(tmp_path, everything=False, config=str(cfg))
+    assert "--config" in args
+    assert str(cfg) in args
+
+
+def test_export_args_omits_config_when_absent(tmp_path, monkeypatch):
+    monkeypatch.setattr(crawler, "accepted_names", lambda kind: set())
+    assert "--config" not in crawler.export_args(tmp_path)
+
+
+def test_unknown_filter_names_are_dropped_not_passed_through(tmp_path, monkeypatch):
+    """A name the binary does not know aborts the whole crawl, so it must be
+    filtered out rather than forwarded."""
+    monkeypatch.setattr(crawler, "accepted_names",
+                        lambda kind: {"Internal:All", "Crawl Overview"})
+    args = crawler.export_args(tmp_path)
+    tabs = args[args.index("--export-tabs") + 1]
+    reports = args[args.index("--save-report") + 1]
+    assert tabs == "Internal:All"
+    assert reports == "Crawl Overview"

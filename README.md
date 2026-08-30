@@ -1,0 +1,176 @@
+# screaming-frog-mcp
+
+Drive the [Screaming Frog SEO Spider](https://www.screamingfrog.co.uk/seo-spider/)
+from Claude, Cursor, or any other MCP client. Crawl a site, get a ranked issue
+register back, ask questions of the crawl data, and render a shareable report —
+without opening the GUI or writing a single command.
+
+**It works on the free, unlicensed SEO Spider.** More on that below, because
+almost everyone assumes it doesn't.
+
+```
+You:  Crawl example.com and tell me what's actually broken.
+
+→ start_crawl(url="https://example.com")
+→ crawl_status()                     # 248 URLs, 51s
+→ get_issues(priority="High")
+
+Claude: Three high-priority problems. The big one: robots.txt disallows
+/_next/, which hides 85 JS and CSS bundles from Google...
+```
+
+## Install
+
+Needs Python 3.10+ and the Screaming Frog SEO Spider installed locally.
+
+<details open>
+<summary><b>Claude Code</b></summary>
+
+```bash
+claude mcp add screaming-frog -- uvx screaming-frog-mcp
+```
+</details>
+
+<details>
+<summary><b>Claude Desktop / Cursor / any client with a JSON config</b></summary>
+
+```json
+{
+  "mcpServers": {
+    "screaming-frog": {
+      "command": "uvx",
+      "args": ["screaming-frog-mcp"]
+    }
+  }
+}
+```
+
+Claude Desktop's config lives at
+`~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or
+`%APPDATA%\Claude\claude_desktop_config.json` (Windows).
+</details>
+
+<details>
+<summary><b>pip instead of uvx</b></summary>
+
+```bash
+pip install screaming-frog-mcp
+```
+
+Then use `"command": "screaming-frog-mcp"` with no args.
+</details>
+
+Ask your client to run `check_install` first. It reports what it found, what
+the current limits are, and how to fix it if the Spider isn't where it expected.
+
+## The free-tier situation
+
+The received wisdom is that the Screaming Frog CLI needs a licence. It does
+not. Verified against a build reporting `Licence Status: Missing`:
+
+| | |
+|---|---|
+| **Works unlicensed** | `--headless`, spider / list / sitemap crawl modes, every tab export, every saved report, sitemap generation |
+| **Licence-gated** | save/load crawl, crawl comparison, config files, JavaScript rendering, scheduling, and the GA4 / Search Console / PageSpeed / Ahrefs / Moz integrations |
+| **Capped** | 500 URLs **per invocation** — not per site |
+
+Because the cap is per invocation, `start_crawl(full=true)` discovers URLs from
+`robots.txt` and the sitemaps, batches them under the cap through list mode,
+and merges the exports back into one set. That crawls a site of any size on the
+free tier.
+
+A licence removes the cap and makes `full` unnecessary. Everything else works
+the same.
+
+## Tools
+
+| Tool | What it does |
+|---|---|
+| `check_install` | Install status, licence status, current limits, and how to fix a failed lookup |
+| `available_filters` | The export names **your** Screaming Frog build accepts |
+| `start_crawl` | Background headless crawl. `full` beats the free cap, `everything` exports every table |
+| `crawl_status` | Poll a running crawl. Omit `job_id` for the most recent |
+| `cancel_crawl` | Stop a crawl, keep partial exports |
+| `list_crawls` | Crawl folders, newest first, with headline counts |
+| `get_issues` | The priority-ranked issue register. **Start here** |
+| `get_analysis` | What the *set* of URLs means: depth, link equity, sitemap accuracy, content depth, performance, indexability, duplication |
+| `list_exports` | The CSV exports in a crawl, with row counts |
+| `read_export` | Rows from one export: column-selectable, filterable, paged, capped |
+| `build_report` | `report.md` + a printable, self-contained `report.html` + `analysis.json` |
+
+## Two design decisions worth knowing
+
+**Crawls are background jobs.** A crawl takes minutes; an MCP call should
+answer in seconds. `start_crawl` forks a detached child and hands back a
+`job_id`. Nothing blocks unless you pass `wait_seconds`. The crawl survives the
+MCP server restarting.
+
+**Reads are capped, on purpose.** A finished crawl folder is tens of megabytes
+of CSV. Feeding that to a model is both useless and expensive. Every read tool
+caps at 500 rows, lets you pick columns, and truncates long cells. Ask
+`get_issues` first — it's the whole site in about 60 lines — and reach for
+`read_export` only to answer a specific question.
+
+## Where crawls are stored
+
+`~/.screaming-frog-mcp/audits/<label>/` by default. Each folder holds the raw
+Screaming Frog CSV exports, `audit-summary.json`, and whatever
+`build_report` wrote.
+
+Override with `SF_MCP_AUDIT_DIR`:
+
+```json
+{
+  "mcpServers": {
+    "screaming-frog": {
+      "command": "uvx",
+      "args": ["screaming-frog-mcp"],
+      "env": { "SF_MCP_AUDIT_DIR": "/Users/you/audits" }
+    }
+  }
+}
+```
+
+Set `SCREAMING_FROG_PATH` if the Spider is installed somewhere non-standard.
+
+## Use it without MCP
+
+The crawl pipeline is a plain module:
+
+```bash
+python -m screaming_frog_mcp.runner --url https://example.com --output ./audit
+python -m screaming_frog_mcp.runner --url https://example.com --output ./audit --full
+```
+
+## Gotchas found the hard way
+
+- **One wrong filter name aborts the whole crawl.** Screaming Frog renames tab
+  filters between versions, and an unrecognised name fails the run with a Java
+  stack trace rather than skipping it. Every name is validated against your
+  installed binary at crawl time, so an upgrade degrades instead of breaking.
+- **Its own `--help` output contains a poisoned entry.** The binary lists a
+  placeholder `UNDEF:Unknown`, and passing it back aborts the crawl with
+  `Using UNDEF as tab is not supported`. It's filtered out.
+- **`everything` mode is curated, not literal.** The Spider lists ~1,150 tab
+  filters, but 800+ are Custom Extraction / Custom Search / Custom JavaScript /
+  AI filters that need a licence-gated config file and are permanently empty.
+  Requesting them costs minutes and returns nothing, so those groups plus the
+  API-dependent ones are excluded.
+
+## Development
+
+```bash
+git clone https://github.com/mshahiddigital/screaming-frog-mcp
+cd screaming-frog-mcp
+pip install -e ".[dev]"
+pytest
+```
+
+The test suite runs on synthetic export fixtures, so it passes on a machine
+that has never had Screaming Frog installed.
+
+## License
+
+MIT. Not affiliated with or endorsed by Screaming Frog Ltd. You need your own
+copy of the SEO Spider; issue names, descriptions and fix guidance in the
+output are Screaming Frog's own.
