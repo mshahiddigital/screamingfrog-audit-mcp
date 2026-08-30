@@ -415,3 +415,24 @@ def test_doctor_treats_the_free_tier_as_a_warning_not_a_failure(monkeypatch, tmp
     status, _, hint = doc._check_licence()
     assert status == doc.WARN
     assert "fully supported" in hint
+
+
+def test_version_is_single_sourced_from_distribution_metadata():
+    """The version was hardcoded in __init__.py once and drifted: the package
+    shipped as 1.0.1 while --doctor still reported 1.0.0. pyproject.toml must
+    stay the only place a version number lives."""
+    import importlib.metadata as md
+    import re
+    from pathlib import Path
+
+    import screamingfrog_audit_mcp as pkg
+
+    assert pkg.__version__ == md.version("screamingfrog-audit-mcp")
+
+    # It must be derived, not restated. The fallback literal for an
+    # uninstalled source tree is allowed; a release number is not.
+    init = Path(pkg.__file__).read_text(encoding="utf-8")
+    assert "importlib.metadata" in init, "version is no longer derived from metadata"
+    hardcoded = re.findall(r'__version__\s*=\s*"([^"]+)"', init)
+    assert all(v.endswith("+source") for v in hardcoded), (
+        f"a release version is hardcoded in __init__.py: {hardcoded}")
