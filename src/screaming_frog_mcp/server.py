@@ -25,7 +25,14 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
-from mcp.server.fastmcp import FastMCP
+# The MCP SDK renamed FastMCP to MCPServer in 2.0. Both are supported, because
+# pinning to one major would break half of the installs out there: a fresh
+# resolve of "mcp" now lands on 2.x, while plenty of environments still hold a
+# pinned 1.x. The decorator and run() signatures are identical across both.
+try:                                        # mcp >= 2.0
+    from mcp.server.mcpserver import MCPServer as _Server
+except ImportError:                         # mcp 1.x
+    from mcp.server.fastmcp import FastMCP as _Server
 
 from . import __version__
 from .analysis import full_analysis, summarize
@@ -43,7 +50,7 @@ AUDIT_ROOT = Path(
 MAX_ROWS = 500      # hard ceiling on any row-returning tool
 MAX_CELL = 300      # characters per cell before truncation
 
-mcp = FastMCP("screaming-frog")
+server = _Server("screaming-frog")
 jobs = Jobs(AUDIT_ROOT)
 
 
@@ -87,7 +94,7 @@ def _normalise(url: str) -> str:
 
 # ── environment ──────────────────────────────────────────────────────────────
 
-@mcp.tool()
+@server.tool()
 def check_install() -> dict:
     """Report whether Screaming Frog is installed, whether it is licensed, and
     what the current limits are. Call this first if anything else fails."""
@@ -134,7 +141,7 @@ def check_install() -> dict:
     return result
 
 
-@mcp.tool()
+@server.tool()
 def available_filters(kind: str = "export-tabs", contains: str = "") -> dict:
     """List the export names the INSTALLED Screaming Frog build accepts.
 
@@ -155,7 +162,7 @@ def available_filters(kind: str = "export-tabs", contains: str = "") -> dict:
 
 # ── crawling ─────────────────────────────────────────────────────────────────
 
-@mcp.tool()
+@server.tool()
 def start_crawl(url: str, label: str = "", full: bool = False,
                 everything: bool = False, config: str = "",
                 wait_seconds: int = 0) -> dict:
@@ -215,7 +222,7 @@ def start_crawl(url: str, label: str = "", full: bool = False,
     return crawl_status(job["job_id"])
 
 
-@mcp.tool()
+@server.tool()
 def crawl_status(job_id: str = "") -> dict:
     """Check a crawl started by start_crawl. Omit job_id for the most recent.
 
@@ -278,7 +285,7 @@ def crawl_status(job_id: str = "") -> dict:
     return result
 
 
-@mcp.tool()
+@server.tool()
 def cancel_crawl(job_id: str) -> dict:
     """Stop a running crawl. Exports already written are kept."""
     job = jobs.read(job_id)
@@ -291,7 +298,7 @@ def cancel_crawl(job_id: str) -> dict:
 
 # ── reading a finished crawl ─────────────────────────────────────────────────
 
-@mcp.tool()
+@server.tool()
 def list_crawls(limit: int = 25) -> dict:
     """List crawl folders in the audit root, newest first."""
     AUDIT_ROOT.mkdir(parents=True, exist_ok=True)
@@ -320,7 +327,7 @@ def list_crawls(limit: int = 25) -> dict:
     return {"audit_root": str(AUDIT_ROOT), "count": len(rows), "crawls": rows}
 
 
-@mcp.tool()
+@server.tool()
 def get_issues(crawl: str, priority: str = "", limit: int = 60,
                include_fixes: bool = True) -> dict:
     """The priority-ranked issue register from a finished crawl.
@@ -362,7 +369,7 @@ def get_issues(crawl: str, priority: str = "", limit: int = 60,
     }
 
 
-@mcp.tool()
+@server.tool()
 def get_analysis(crawl: str, section: str = "") -> dict:
     """The derived analysis: what the SET of URLs means, not what each URL is.
 
@@ -392,7 +399,7 @@ def get_analysis(crawl: str, section: str = "") -> dict:
             "sections": sorted(data), "analysis": data}
 
 
-@mcp.tool()
+@server.tool()
 def list_exports(crawl: str, contains: str = "") -> dict:
     """List the CSV exports in a crawl folder, with row counts.
 
@@ -415,7 +422,7 @@ def list_exports(crawl: str, contains: str = "") -> dict:
     return {"crawl": folder.name, "count": len(rows), "exports": rows}
 
 
-@mcp.tool()
+@server.tool()
 def read_export(crawl: str, export: str, columns: str = "", contains: str = "",
                 limit: int = 50, offset: int = 0) -> dict:
     """Read rows from one CSV export, capped and filtered.
@@ -473,7 +480,7 @@ def read_export(crawl: str, export: str, columns: str = "", contains: str = "",
 
 # ── reporting ────────────────────────────────────────────────────────────────
 
-@mcp.tool()
+@server.tool()
 def build_report(crawl: str, label: str = "") -> dict:
     """Write a shareable write-up of a finished crawl into its folder:
     report.md, a self-contained printable report.html, and analysis.json.
@@ -495,7 +502,7 @@ def build_report(crawl: str, label: str = "") -> dict:
 
 def main() -> None:
     AUDIT_ROOT.mkdir(parents=True, exist_ok=True)
-    mcp.run()
+    server.run()
 
 
 if __name__ == "__main__":

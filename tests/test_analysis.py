@@ -270,3 +270,26 @@ def test_unknown_filter_names_are_dropped_not_passed_through(tmp_path, monkeypat
     reports = args[args.index("--save-report") + 1]
     assert tabs == "Internal:All"
     assert reports == "Crawl Overview"
+
+
+# ── MCP SDK compatibility ────────────────────────────────────────────────────
+
+def test_server_imports_and_registers_every_tool():
+    """Guards the SDK rename: mcp 2.0 moved FastMCP to MCPServer, and a fresh
+    `pip install mcp` now resolves to 2.x. Importing under whichever major is
+    present must work, or every new install crashes on startup."""
+    from screaming_frog_mcp import server as srv
+
+    assert srv.server is not None
+    for name in ("check_install", "available_filters", "start_crawl",
+                 "crawl_status", "cancel_crawl", "list_crawls", "get_issues",
+                 "get_analysis", "list_exports", "read_export", "build_report"):
+        assert callable(getattr(srv, name)), f"{name} is not exposed"
+
+
+def test_server_module_does_not_shadow_the_mcp_package():
+    """`mcp = FastMCP(...)` would rebind the package name inside the module."""
+    import mcp as sdk
+
+    from screaming_frog_mcp import server as srv
+    assert getattr(srv, "mcp", sdk) is sdk
