@@ -3,6 +3,38 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] — 2026-08-31
+
+Three tools added and one hardened: a crawl allowlist, server-side
+aggregation, and storage management.
+
+### Added
+
+- **`SF_ALLOWED_DOMAINS`.** By default this server will crawl any host it is
+  asked to, which is fine locally and a liability unattended: a confused or
+  prompt-injected agent can point a crawler at internal addresses or at third
+  parties. With the variable set, `start_crawl` refuses anything else.
+  Subdomains of a listed domain pass; look-alikes such as
+  `example.com.evil.com` do not. `--doctor` reports whether it is active.
+- **`aggregate_export`** — counts and group-by *without returning rows*.
+  "How many 404s", "status codes by folder", "word count per section" now cost
+  one small response instead of paging thousands of rows through a model to
+  count them by hand. Optionally summarises a numeric column (sum/avg/min/max)
+  per group.
+- **`storage_summary`** — disk used per saved crawl, largest first. Crawl
+  folders are never cleaned up automatically and an `everything=true` run
+  writes hundreds of CSVs.
+- **`delete_crawl`** — permanently remove a crawl folder. Requires
+  `confirm=true` and refuses any path outside the audit root, so a crafted
+  path cannot delete arbitrary directories.
+
+### Changed
+
+- **`read_export` filtering is much sharper.** `column` restricts the filter to
+  one named column instead of matching across the whole row, and `mode`
+  selects `contains` (default), `exact` or `regex`. An unknown column now
+  errors with the list of real ones rather than silently matching nothing.
+
 ## [1.0.2] — 2026-08-31
 
 ### Fixed

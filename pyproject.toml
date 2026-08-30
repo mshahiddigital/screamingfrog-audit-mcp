@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "screamingfrog-audit-mcp"
-version = "1.0.2"
+version = "1.1.0"
 description = "Drive the Screaming Frog SEO Spider from any MCP client: headless crawls, a ranked issue register, derived analysis and a shareable report."
 readme = "README.md"
 license = "MIT"

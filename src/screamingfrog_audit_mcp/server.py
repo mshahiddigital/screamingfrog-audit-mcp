@@ -20,6 +20,8 @@ from __future__ import annotations
 import csv
 import json
 import os
+import re
+import shutil
 import sys
 import time
 from datetime import datetime
@@ -43,6 +45,7 @@ from .jobs import Jobs
 from .report import build as build_report_files
 
 ENV_AUDIT_DIR = "SF_MCP_AUDIT_DIR"
+ENV_ALLOWED = "SF_ALLOWED_DOMAINS"
 
 AUDIT_ROOT = Path(
     os.environ.get(ENV_AUDIT_DIR) or (Path.home() / ".screamingfrog-audit-mcp" / "audits")
@@ -93,6 +96,31 @@ def _normalise(url: str) -> str:
     return url if url.startswith(("http://", "https://")) else "https://" + url
 
 
+def _allowed_domains() -> list[str]:
+    raw = os.environ.get(ENV_ALLOWED, "")
+    return [d.strip().lower().lstrip(".") for d in raw.split(",") if d.strip()]
+
+
+def _check_allowed(url: str) -> None:
+    """Refuse hosts outside the allowlist, when one is configured.
+
+    An MCP server that will crawl any host an agent names is a liability in
+    unattended use: a prompt-injected or confused agent can point it at
+    internal addresses or at third parties. Setting SF_ALLOWED_DOMAINS turns
+    this server into one that can only ever touch sites you nominated.
+    """
+    allowed = _allowed_domains()
+    if not allowed:
+        return
+    host = (urlparse(url).hostname or "").lower()
+    if not any(host == d or host.endswith("." + d) for d in allowed):
+        raise ValueError(
+            f"{host!r} is not in {ENV_ALLOWED}. "
+            f"Allowed: {', '.join(allowed)}. "
+            "Add the domain to that environment variable to crawl it."
+        )
+
+
 # ── environment ──────────────────────────────────────────────────────────────
 
 @server.tool()
@@ -110,7 +138,9 @@ def check_install() -> dict:
         "url_cap_per_invocation": None if licensed else FREE_URL_CAP,
         "audit_root": str(AUDIT_ROOT),
         "env_overrides": {ENV_BINARY: "path to the SEO Spider executable",
-                          ENV_AUDIT_DIR: "where crawl folders are written"},
+                          ENV_AUDIT_DIR: "where crawl folders are written",
+                          ENV_ALLOWED: "comma-separated domains this server may crawl"},
+        "allowed_domains": _allowed_domains() or "any (no allowlist configured)",
     }
     if binary is None:
         result["how_to_fix"] = install_hint()
@@ -187,6 +217,8 @@ def start_crawl(url: str, label: str = "", full: bool = False,
                   finished. 0 returns straight away.
     """
     _require_binary()
+    url = _normalise(url)
+    _check_allowed(url)
     if config:
         if not is_licensed():
             raise RuntimeError(
@@ -195,7 +227,6 @@ def start_crawl(url: str, label: str = "", full: bool = False,
                 "Re-run without config, or license the SEO Spider.")
         if not Path(config).expanduser().exists():
             raise RuntimeError(f"config file not found: {config}")
-    url = _normalise(url)
     folder = label.strip() or f"{_slug(url)}-{datetime.now():%Y-%m-%d}"
     out_dir = (AUDIT_ROOT / folder).resolve()
 
@@ -425,6 +456,7 @@ def list_exports(crawl: str, contains: str = "") -> dict:
 
 @server.tool()
 def read_export(crawl: str, export: str, columns: str = "", contains: str = "",
+                column: str = "", mode: str = "contains",
                 limit: int = 50, offset: int = 0) -> dict:
     """Read rows from one CSV export, capped and filtered.
 
@@ -433,7 +465,10 @@ def read_export(crawl: str, export: str, columns: str = "", contains: str = "",
              (the .csv suffix is optional)
     columns  comma-separated columns to keep. Empty returns the first 8;
              Screaming Frog exports can be 60 columns wide.
-    contains substring filter matched across the whole row
+    contains the filter value. Empty returns everything.
+    column   restrict the filter to one column. Empty matches across the row.
+    mode     'contains' (default, case-insensitive substring), 'exact'
+             (case-insensitive full match) or 'regex' (Python regex).
     limit    max rows returned (hard ceiling 500)
     offset   skip this many matching rows, for paging
     """
@@ -445,15 +480,18 @@ def read_export(crawl: str, export: str, columns: str = "", contains: str = "",
 
     limit = max(1, min(limit, MAX_ROWS))
     wanted = [c.strip() for c in columns.split(",") if c.strip()]
+    match = _matcher(contains, mode)
 
     with open(path, newline="", encoding="utf-8-sig") as fh:
         reader = csv.DictReader(fh)
         headers = reader.fieldnames or []
+        if column and column not in headers:
+            raise ValueError(
+                f"No column {column!r} in {name}. Columns: {', '.join(headers)}")
         keep = [c for c in wanted if c in headers] or headers[:8]
         rows, matched, taken = [], 0, 0
         for row in reader:
-            if contains and contains.lower() not in " ".join(
-                    str(v) for v in row.values() if v).lower():
+            if not match(_field(row, column)):
                 continue
             matched += 1
             if matched <= offset:
@@ -471,12 +509,176 @@ def read_export(crawl: str, export: str, columns: str = "", contains: str = "",
         "offset": offset,
         "rows": rows,
     }
+    result["filter"] = {"contains": contains, "column": column or "any", "mode": mode} \
+        if contains else None
     unknown = [c for c in wanted if c not in headers]
     if unknown:
         result["ignored_unknown_columns"] = unknown
     if matched > offset + len(rows):
         result["more"] = f"Call again with offset={offset + len(rows)}."
     return result
+
+
+def _field(row: dict, column: str) -> str:
+    """One column's value, or the whole row joined, for filtering."""
+    if column:
+        return str(row.get(column) or "")
+    return " ".join(str(v) for v in row.values() if v)
+
+
+def _matcher(needle: str, mode: str):
+    """Build a predicate for the requested filter mode."""
+    if not needle:
+        return lambda _: True
+    if mode == "exact":
+        target = needle.lower()
+        return lambda value: value.lower() == target
+    if mode == "regex":
+        try:
+            rx = re.compile(needle, re.I)
+        except re.error as e:
+            raise ValueError(f"Invalid regex {needle!r}: {e}") from None
+        return lambda value: rx.search(value) is not None
+    if mode != "contains":
+        raise ValueError(f"mode must be contains, exact or regex, not {mode!r}")
+    target = needle.lower()
+    return lambda value: target in value.lower()
+
+
+@server.tool()
+def aggregate_export(crawl: str, export: str, group_by: str,
+                     contains: str = "", column: str = "",
+                     mode: str = "contains", metric: str = "",
+                     limit: int = 30) -> dict:
+    """Count and group rows WITHOUT returning them.
+
+    Answers "how many 404s", "status code distribution", "which folder holds
+    the thin pages" in one small response, instead of paging thousands of rows
+    through the model to count them by hand. Reach for this before read_export
+    whenever the question is "how many" or "broken down by".
+
+    group_by  the column to group on, e.g. 'Status Code' or 'Indexability'
+    metric    optional numeric column to summarise per group (sum/avg/min/max),
+              e.g. 'Word Count'
+    contains / column / mode  the same filter as read_export, applied first
+    limit     max groups returned, largest first (hard ceiling 500)
+    """
+    folder = _resolve(crawl)
+    name = export if export.endswith(".csv") else f"{export}.csv"
+    path = folder / name
+    if not path.exists():
+        raise ValueError(f"No export '{name}' in {folder.name}. Call list_exports first.")
+
+    limit = max(1, min(limit, MAX_ROWS))
+    match = _matcher(contains, mode)
+    groups: dict[str, int] = {}
+    values: dict[str, list] = {}
+    matched = 0
+
+    with open(path, newline="", encoding="utf-8-sig") as fh:
+        reader = csv.DictReader(fh)
+        headers = reader.fieldnames or []
+        for label, col in (("group_by", group_by), ("column", column), ("metric", metric)):
+            if col and col not in headers:
+                raise ValueError(
+                    f"No column {col!r} for {label} in {name}. "
+                    f"Columns: {', '.join(headers)}")
+        for row in reader:
+            if not match(_field(row, column)):
+                continue
+            matched += 1
+            key = (row.get(group_by) or "(blank)").strip() or "(blank)"
+            groups[key] = groups.get(key, 0) + 1
+            if metric:
+                raw = str(row.get(metric) or "").replace(",", "").strip()
+                try:
+                    values.setdefault(key, []).append(float(raw))
+                except ValueError:
+                    pass
+
+    ordered = sorted(groups.items(), key=lambda kv: -kv[1])[:limit]
+    out = []
+    for key, count in ordered:
+        entry = {"value": key, "rows": count,
+                 "pct": round(100 * count / matched, 1) if matched else 0.0}
+        nums = values.get(key)
+        if nums:
+            entry["metric"] = {
+                "column": metric, "sum": round(sum(nums), 2),
+                "avg": round(sum(nums) / len(nums), 2),
+                "min": min(nums), "max": max(nums),
+            }
+        out.append(entry)
+
+    return {
+        "crawl": folder.name, "export": name, "group_by": group_by,
+        "rows_matched": matched, "distinct_values": len(groups),
+        "returned": len(out), "groups": out,
+    }
+
+
+@server.tool()
+def storage_summary(limit: int = 25) -> dict:
+    """Disk used by saved crawls, largest first.
+
+    Crawl folders are never cleaned up automatically, and an --everything run
+    writes hundreds of CSVs, so this is how you find what to delete.
+    """
+    AUDIT_ROOT.mkdir(parents=True, exist_ok=True)
+    rows, total = [], 0
+    for d in AUDIT_ROOT.iterdir():
+        if not d.is_dir() or d.name.startswith("."):
+            continue
+        size = files = 0
+        for f in d.rglob("*"):
+            if f.is_file():
+                try:
+                    size += f.stat().st_size
+                except OSError:
+                    pass
+                files += 1
+        total += size
+        rows.append({"crawl": d.name, "mb": round(size / 1_048_576, 2),
+                     "files": files,
+                     "modified": datetime.fromtimestamp(
+                         d.stat().st_mtime).isoformat(timespec="minutes")})
+    rows.sort(key=lambda r: -r["mb"])
+    return {
+        "audit_root": str(AUDIT_ROOT),
+        "crawls": len(rows),
+        "total_mb": round(total / 1_048_576, 2),
+        "largest": rows[:max(1, min(limit, MAX_ROWS))],
+    }
+
+
+@server.tool()
+def delete_crawl(crawl: str, confirm: bool = False) -> dict:
+    """Permanently delete one crawl folder and everything in it.
+
+    Destructive and irreversible, so it requires confirm=true and refuses any
+    path outside the audit root. Check storage_summary first.
+    """
+    folder = _resolve(crawl)
+    root = AUDIT_ROOT.resolve()
+    if not folder.is_dir():
+        raise ValueError(f"No such crawl: {folder.name}")
+    # Never let a crafted path escape the audit root.
+    if root != folder and root not in folder.parents:
+        raise ValueError(
+            f"Refusing to delete {folder}: outside the audit root {root}.")
+    if folder == root:
+        raise ValueError("Refusing to delete the audit root itself.")
+
+    size = sum(f.stat().st_size for f in folder.rglob("*") if f.is_file())
+    if not confirm:
+        return {
+            "crawl": folder.name, "deleted": False,
+            "would_free_mb": round(size / 1_048_576, 2),
+            "confirm_required": "Call again with confirm=true to delete this permanently.",
+        }
+    shutil.rmtree(folder)
+    return {"crawl": folder.name, "deleted": True,
+            "freed_mb": round(size / 1_048_576, 2)}
 
 
 # ── reporting ────────────────────────────────────────────────────────────────
