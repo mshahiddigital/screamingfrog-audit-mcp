@@ -36,7 +36,8 @@ def _alive_windows(pid: int) -> bool:
     """Windows liveness without signals. os.kill would terminate the process."""
     try:
         out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
-                             capture_output=True, text=True, timeout=15).stdout
+                             capture_output=True, text=True, timeout=15,
+                             encoding="utf-8", errors="replace").stdout
     except (OSError, subprocess.SubprocessError):
         return True                               # unknown: assume still going
     return str(pid) in out
@@ -117,7 +118,8 @@ class Jobs:
             return False
         try:
             state = subprocess.run(["ps", "-o", "state=", "-p", str(pid)],
-                                   capture_output=True, text=True, timeout=10).stdout.strip()
+                                   capture_output=True, text=True, timeout=10,
+                                   encoding="utf-8", errors="replace").stdout.strip()
         except (OSError, subprocess.SubprocessError):
             return True
         return bool(state) and not state.startswith("Z")

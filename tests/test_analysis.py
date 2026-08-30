@@ -356,3 +356,21 @@ def test_posix_liveness_treats_a_zombie_as_finished(monkeypatch, tmp_path):
                         lambda *a, **k: type("R", (), {"stdout": "Z+\n"})())
     j = J.Jobs(tmp_path)
     assert j.running({"job_id": "absent", "pid": 4321}) is False
+
+
+def test_no_subprocess_decodes_with_the_locale_encoding():
+    """text=True without an explicit encoding decodes as cp1252 on Windows, so
+    the first non-ASCII byte raises UnicodeDecodeError."""
+    import re
+    from pathlib import Path
+
+    import screaming_frog_mcp
+
+    src = Path(screaming_frog_mcp.__file__).parent
+    offenders = []
+    for f in src.glob("*.py"):
+        text = f.read_text(encoding="utf-8")
+        for call in re.findall(r"subprocess\.run\((?:[^()]|\([^()]*\))*\)", text):
+            if "text=True" in call and "encoding=" not in call:
+                offenders.append(f"{f.name}: {' '.join(call.split())[:90]}")
+    assert not offenders, "unpinned decode: " + "; ".join(offenders)

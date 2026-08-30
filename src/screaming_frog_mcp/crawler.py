@@ -131,9 +131,13 @@ def accepted_names(kind: str) -> set[str]:
     if binary is None:
         return set()
     try:
+        # encoding must be pinned: text=True decodes with the locale encoding,
+        # which is cp1252 on a Windows box, and one undecodable byte in the
+        # filter list would take the whole crawl down.
         out = subprocess.run(
             [str(binary), "--help", kind],
             capture_output=True, text=True, timeout=180,
+            encoding="utf-8", errors="replace",
         ).stdout
     except (OSError, subprocess.SubprocessError):
         _NAME_CACHE[kind] = set()
