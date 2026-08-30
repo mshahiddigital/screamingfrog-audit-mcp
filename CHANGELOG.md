@@ -3,6 +3,23 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] — 2026-08-31
+
+Packaging metadata brought in line with the current Python packaging guides.
+No functional change to the server.
+
+### Changed
+
+- **License declared as an SPDX expression** (PEP 639): `license = "MIT"` plus
+  `license-files`, replacing the deprecated `license = { file = "LICENSE" }`
+  table. The old form put the *entire* text of the licence into the `License:`
+  metadata field, which is what PyPI displayed.
+- Dropped the now-redundant `License :: OSI Approved :: MIT License`
+  classifier, which PEP 639 deprecates alongside a license expression.
+- Added `Repository` and `Changelog` project URLs.
+- Declared and tested support for Python 3.14; the CI matrix now covers
+  3.10, 3.12, 3.13 and 3.14 on Linux, macOS and Windows.
+
 ## [1.0.0] — 2026-08-31
 
 First public release. Drive the Screaming Frog SEO Spider from any MCP client.
