@@ -4,22 +4,23 @@ build-backend = "hatchling.build"
 
 [project]
 name = "screamingfrog-audit-mcp"
-version = "1.0.0"
+version = "1.0.1"
 description = "Drive the Screaming Frog SEO Spider from any MCP client: headless crawls, a ranked issue register, derived analysis and a shareable report."
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
 requires-python = ">=3.10"
 authors = [{ name = "Muhammad Shahid" }]
 keywords = ["mcp", "seo", "screaming-frog", "crawler", "site-audit", "technical-seo"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
 ]
 dependencies = ["mcp>=1.2.0"]
@@ -33,7 +34,9 @@ screamingfrog-audit-mcp-doctor = "screamingfrog_audit_mcp.doctor:run"
 
 [project.urls]
 Homepage = "https://github.com/mshahiddigital/screamingfrog-audit-mcp"
+Repository = "https://github.com/mshahiddigital/screamingfrog-audit-mcp"
 Issues = "https://github.com/mshahiddigital/screamingfrog-audit-mcp/issues"
+Changelog = "https://github.com/mshahiddigital/screamingfrog-audit-mcp/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/screamingfrog_audit_mcp"]
