@@ -3,6 +3,16 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.2] — 2026-08-31
+
+### Fixed
+
+- **The version is single-sourced from `pyproject.toml` again.** It had been
+  restated in `__init__.py` and drifted immediately: 1.0.1 shipped while
+  `--doctor` still reported `1.0.0`. `__version__` is now read from the
+  installed distribution metadata, so there is one place a version number
+  lives. A test asserts the two agree and that no release number is hardcoded.
+
 ## [1.0.1] — 2026-08-31
 
 Packaging metadata brought in line with the current Python packaging guides.
