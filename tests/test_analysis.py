@@ -436,3 +436,157 @@ def test_version_is_single_sourced_from_distribution_metadata():
     hardcoded = re.findall(r'__version__\s*=\s*"([^"]+)"', init)
     assert all(v.endswith("+source") for v in hardcoded), (
         f"a release version is hardcoded in __init__.py: {hardcoded}")
+
+
+# ── domain allowlist ─────────────────────────────────────────────────────────
+
+def test_allowlist_permits_the_domain_and_its_subdomains(monkeypatch):
+    from screamingfrog_audit_mcp import server as srv
+
+    monkeypatch.setenv("SF_ALLOWED_DOMAINS", "example.com, acme.co.uk")
+    srv._check_allowed("https://example.com/page")
+    srv._check_allowed("https://www.example.com/")
+    srv._check_allowed("https://shop.acme.co.uk/x")
+
+
+def test_allowlist_blocks_everything_else(monkeypatch):
+    """Without this, a confused or prompt-injected agent can point the crawler
+    at internal hosts or unrelated third parties."""
+    from screamingfrog_audit_mcp import server as srv
+
+    monkeypatch.setenv("SF_ALLOWED_DOMAINS", "example.com")
+    for bad in ("https://evil.com/", "http://169.254.169.254/latest/meta-data/",
+                "https://notexample.com/", "https://example.com.evil.com/"):
+        with pytest.raises(ValueError, match="not in SF_ALLOWED_DOMAINS"):
+            srv._check_allowed(bad)
+
+
+def test_no_allowlist_means_no_restriction(monkeypatch):
+    from screamingfrog_audit_mcp import server as srv
+
+    monkeypatch.delenv("SF_ALLOWED_DOMAINS", raising=False)
+    srv._check_allowed("https://anything.example/")
+
+
+# ── filter modes ─────────────────────────────────────────────────────────────
+
+def test_filter_modes(monkeypatch):
+    from screamingfrog_audit_mcp import server as srv
+
+    assert srv._matcher("FOO", "contains")("a foo b") is True
+    assert srv._matcher("foo", "exact")("FOO") is True
+    assert srv._matcher("foo", "exact")("foo bar") is False
+    assert srv._matcher(r"^\d{3}$", "regex")("404") is True
+    assert srv._matcher(r"^\d{3}$", "regex")("4041") is False
+    assert srv._matcher("", "contains")("anything") is True
+    with pytest.raises(ValueError, match="Invalid regex"):
+        srv._matcher("[unclosed", "regex")
+    with pytest.raises(ValueError, match="mode must be"):
+        srv._matcher("x", "fuzzy")
+
+
+def test_read_export_filters_by_named_column(crawl, monkeypatch, tmp_path):
+    from screamingfrog_audit_mcp import server as srv
+
+    monkeypatch.setattr(srv, "AUDIT_ROOT", crawl.parent)
+    out = srv.read_export(crawl=crawl.name, export="internal_all",
+                          column="Indexability", contains="Non-Indexable",
+                          mode="exact", columns="Address,Indexability")
+    assert out["total_matching_rows"] == 1
+    assert out["rows"][0]["Address"].endswith("/c")
+
+
+def test_read_export_rejects_an_unknown_filter_column(crawl, monkeypatch):
+    from screamingfrog_audit_mcp import server as srv
+
+    monkeypatch.setattr(srv, "AUDIT_ROOT", crawl.parent)
+    with pytest.raises(ValueError, match="No column"):
+        srv.read_export(crawl=crawl.name, export="internal_all", column="Nope",
+                        contains="x")
+
+
+# ── aggregation ──────────────────────────────────────────────────────────────
+
+def test_aggregate_counts_without_returning_rows(crawl, monkeypatch):
+    """The point: answer 'how many, broken down by' in one small response."""
+    from screamingfrog_audit_mcp import server as srv
+
+    monkeypatch.setattr(srv, "AUDIT_ROOT", crawl.parent)
+    out = srv.aggregate_export(crawl=crawl.name, export="internal_all",
+                               group_by="Indexability")
+    assert out["rows_matched"] == 4
+    by = {g["value"]: g["rows"] for g in out["groups"]}
+    assert by == {"Indexable": 3, "Non-Indexable": 1}
+    assert "rows" not in out                      # never returns the rows
+
+
+def test_aggregate_summarises_a_numeric_metric(crawl, monkeypatch):
+    from screamingfrog_audit_mcp import server as srv
+
+    monkeypatch.setattr(srv, "AUDIT_ROOT", crawl.parent)
+    out = srv.aggregate_export(crawl=crawl.name, export="internal_all",
+                               group_by="Indexability", metric="Word Count")
+    indexable = next(g for g in out["groups"] if g["value"] == "Indexable")
+    assert indexable["metric"]["sum"] == 1100.0    # 900 + 120 + 80
+    assert indexable["metric"]["max"] == 900.0
+
+
+def test_aggregate_rejects_unknown_columns(crawl, monkeypatch):
+    from screamingfrog_audit_mcp import server as srv
+
+    monkeypatch.setattr(srv, "AUDIT_ROOT", crawl.parent)
+    with pytest.raises(ValueError, match="No column 'Nope' for group_by"):
+        srv.aggregate_export(crawl=crawl.name, export="internal_all", group_by="Nope")
+
+
+# ── storage ──────────────────────────────────────────────────────────────────
+
+def test_delete_crawl_requires_confirmation(crawl, monkeypatch):
+    from screamingfrog_audit_mcp import server as srv
+
+    monkeypatch.setattr(srv, "AUDIT_ROOT", crawl.parent)
+    out = srv.delete_crawl(crawl=crawl.name)
+    assert out["deleted"] is False
+    assert crawl.exists(), "must not delete without confirm"
+
+    out = srv.delete_crawl(crawl=crawl.name, confirm=True)
+    assert out["deleted"] is True
+    assert not crawl.exists()
+
+
+def test_delete_crawl_refuses_paths_outside_the_audit_root(tmp_path, monkeypatch):
+    """A crafted absolute path must never delete arbitrary directories."""
+    from screamingfrog_audit_mcp import server as srv
+
+    root = tmp_path / "audits"
+    (root / "a-crawl").mkdir(parents=True)
+    monkeypatch.setattr(srv, "AUDIT_ROOT", root)
+
+    outside = tmp_path / "precious"
+    outside.mkdir()
+    (outside / "keep.txt").write_text("x", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="outside the audit root"):
+        srv.delete_crawl(crawl=str(outside), confirm=True)
+    assert (outside / "keep.txt").exists()
+
+    with pytest.raises(ValueError, match="audit root itself"):
+        srv.delete_crawl(crawl=str(root), confirm=True)
+    assert root.exists()
+
+
+def test_storage_summary_reports_sizes(tmp_path, monkeypatch):
+    from screamingfrog_audit_mcp import server as srv
+
+    root = tmp_path / "audits"
+    folder = root / "site-2026-08-31"
+    folder.mkdir(parents=True)
+    (folder / "internal_all.csv").write_text("x" * 2048, encoding="utf-8")
+    (root / ".jobs").mkdir()                     # hidden, must be skipped
+    monkeypatch.setattr(srv, "AUDIT_ROOT", root)
+
+    out = srv.storage_summary()
+    assert out["crawls"] == 1
+    assert out["largest"][0]["crawl"] == "site-2026-08-31"
+    assert out["largest"][0]["files"] == 1
+    assert out["total_mb"] >= 0

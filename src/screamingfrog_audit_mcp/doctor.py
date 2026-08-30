@@ -22,6 +22,7 @@ from .finder import ENV_BINARY, LICENCE_FILE, candidates, find_binary, is_licens
 PASS, FAIL, WARN = "PASS", "FAIL", "WARN"
 
 ENV_AUDIT_DIR = "SF_MCP_AUDIT_DIR"
+ENV_ALLOWED = "SF_ALLOWED_DOMAINS"
 
 
 def _default_audit_root() -> Path:
@@ -127,6 +128,17 @@ def _check_audit_dir() -> tuple[str, str, str]:
     return PASS, f"Audit folder writable: {root}", ""
 
 
+def _check_allowlist() -> tuple[str, str, str]:
+    raw = os.environ.get(ENV_ALLOWED, "").strip()
+    if not raw:
+        return (WARN, "No crawl allowlist: this server may crawl any host",
+                f"Fine for personal use. For unattended or shared setups set\n"
+                f"    {ENV_ALLOWED}=example.com,acme.co.uk so an agent cannot point\n"
+                "    the crawler at internal addresses or third parties.")
+    domains = [d.strip() for d in raw.split(",") if d.strip()]
+    return PASS, f"Crawl allowlist active: {', '.join(domains)}", ""
+
+
 def _client_config() -> str:
     """The exact snippet to paste, matching how this copy was installed."""
     if Path(sys.argv[0]).name.startswith("screamingfrog-audit-mcp"):
@@ -154,6 +166,7 @@ def run() -> int:
         ("Spider runs", _check_binary_runs),
         ("Licence", _check_licence),
         ("Audit folder", _check_audit_dir),
+        ("Allowlist", _check_allowlist),
     ]
 
     print(f"screamingfrog-audit-mcp {__version__} — preflight check\n")

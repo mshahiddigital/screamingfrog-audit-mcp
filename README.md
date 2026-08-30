@@ -138,7 +138,10 @@ the same.
 | `get_issues` | The priority-ranked issue register. **Start here** |
 | `get_analysis` | What the *set* of URLs means: depth, link equity, sitemap accuracy, content depth, performance, indexability, duplication |
 | `list_exports` | The CSV exports in a crawl, with row counts |
-| `read_export` | Rows from one export: column-selectable, filterable, paged, capped |
+| `read_export` | Rows from one export: column-selectable, paged, capped, filtered by `contains` / `exact` / `regex` on any column |
+| `aggregate_export` | **Counts and group-by without returning rows** — "how many 404s", "status codes by folder" — in one small response |
+| `storage_summary` | Disk used per saved crawl, largest first |
+| `delete_crawl` | Permanently delete a crawl folder (requires `confirm`) |
 | `build_report` | `report.md` + a printable, self-contained `report.html` + `analysis.json` |
 
 ## Two design decisions worth knowing
@@ -151,8 +154,10 @@ MCP server restarting.
 **Reads are capped, on purpose.** A finished crawl folder is tens of megabytes
 of CSV. Feeding that to a model is both useless and expensive. Every read tool
 caps at 500 rows, lets you pick columns, and truncates long cells. Ask
-`get_issues` first — it's the whole site in about 60 lines — and reach for
-`read_export` only to answer a specific question.
+`get_issues` first — it's the whole site in about 60 lines — and
+`aggregate_export` when the question is "how many" or "broken down by", since
+counting rows by hand through a model is the expensive way to get a number.
+Reach for `read_export` only when you actually need the rows.
 
 ## Where crawls are stored
 
@@ -175,6 +180,31 @@ Override with `SF_MCP_AUDIT_DIR`:
 ```
 
 Set `SCREAMING_FROG_PATH` if the Spider is installed somewhere non-standard.
+
+## Restricting what it may crawl
+
+By default this server will crawl any host it is asked to. That is fine on your
+own machine, and a liability when an agent runs unattended: a confused or
+prompt-injected one can point a crawler at internal addresses or at third
+parties who did not ask to be crawled.
+
+Set `SF_ALLOWED_DOMAINS` and `start_crawl` refuses anything else:
+
+```json
+"env": { "SF_ALLOWED_DOMAINS": "example.com,acme.co.uk" }
+```
+
+Subdomains of a listed domain are allowed; look-alikes are not, so
+`shop.example.com` passes and `example.com.evil.com` does not. `--doctor`
+reports whether an allowlist is active.
+
+### Environment variables
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `SCREAMING_FROG_PATH` | Path to the SEO Spider executable | auto-discovered per platform |
+| `SF_MCP_AUDIT_DIR` | Where crawl folders are written | `~/.screaming-frog-mcp/audits` |
+| `SF_ALLOWED_DOMAINS` | Comma-separated domains this server may crawl | unset (no restriction) |
 
 ## Use it without MCP
 
