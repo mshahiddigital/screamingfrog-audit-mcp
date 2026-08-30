@@ -168,6 +168,11 @@ python -m screaming_frog_mcp.runner --url https://example.com --output ./audit -
 - **Its own `--help` output contains a poisoned entry.** The binary lists a
   placeholder `UNDEF:Unknown`, and passing it back aborts the crawl with
   `Using UNDEF as tab is not supported`. It's filtered out.
+- **`os.kill(pid, 0)` is not a liveness probe on Windows.** Any signal other
+  than CTRL_C/CTRL_BREAK routes to `TerminateProcess`, so the usual "does this
+  pid exist" idiom would kill the crawl and then report it finished. Windows
+  uses `tasklist` to check and `taskkill` to cancel, and never signals.
+  Detaching differs too: `start_new_session` is POSIX-only.
 - **`everything` mode is curated, not literal.** The Spider lists ~1,150 tab
   filters, but 800+ are Custom Extraction / Custom Search / Custom JavaScript /
   AI filters that need a licence-gated config file and are permanently empty.

@@ -3,14 +3,20 @@
 A crawl takes minutes; an MCP tool call is expected to answer in seconds. So a
 crawl is forked as a detached child and tracked here.
 
-THE TRAP THIS MODULE EXISTS TO AVOID
+TWO TRAPS THIS MODULE EXISTS TO AVOID
 ------------------------------------
-Liveness cannot be checked with os.kill(pid, 0). A finished child whose parent
-never wait()s becomes a zombie, and os.kill reports a zombie as alive, so a
-crawl that finished in 55 seconds still polls "running" forever. The Popen
-handle is kept and poll() is used instead, which also reaps. Only when the
-handle is gone (the server restarted since launch) does it fall back to
-inspecting the process state, where a Z state means finished.
+1. Liveness cannot be checked with os.kill(pid, 0). A finished child whose
+   parent never wait()s becomes a zombie, and os.kill reports a zombie as
+   alive, so a crawl that finished in 55 seconds polls "running" forever. The
+   Popen handle is kept and poll() is used instead, which also reaps.
+
+2. os.kill(pid, 0) is not even a probe on Windows. Any signal other than
+   CTRL_C_EVENT / CTRL_BREAK_EVENT routes to TerminateProcess, so the classic
+   "does this pid exist" idiom would KILL the crawl and then report it
+   finished. Windows uses tasklist to check and taskkill to stop, and never
+   reaches os.kill. Detaching differs too: start_new_session is POSIX-only, so
+   Windows uses creation flags.
+
 """
 
 from __future__ import annotations
@@ -24,6 +30,16 @@ from datetime import datetime
 from pathlib import Path
 
 _PROCS: dict[str, subprocess.Popen] = {}
+
+
+def _alive_windows(pid: int) -> bool:
+    """Windows liveness without signals. os.kill would terminate the process."""
+    try:
+        out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                             capture_output=True, text=True, timeout=15).stdout
+    except (OSError, subprocess.SubprocessError):
+        return True                               # unknown: assume still going
+    return str(pid) in out
 
 
 class Jobs:
@@ -56,11 +72,20 @@ class Jobs:
         """Fork a detached child running `python -m screaming_frog_mcp.runner`."""
         cmd = [sys.executable, "-u", "-m", "screaming_frog_mcp.runner"] + args
         out_dir.mkdir(parents=True, exist_ok=True)
+
+        # Detach so the crawl outlives this server. start_new_session maps to
+        # setsid() and is POSIX-only; Windows needs creation flags instead.
+        if sys.platform == "win32":
+            detach = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP
+                                       | subprocess.DETACHED_PROCESS}
+        else:
+            detach = {"start_new_session": True}
+
         with open(out_dir / "runner.log", "w", encoding="utf-8") as log:
             proc = subprocess.Popen(
                 cmd, stdout=log, stderr=subprocess.STDOUT,
-                start_new_session=True,
                 env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)},
+                **detach,
             )
         job_id = f"{folder}-{proc.pid}"
         _PROCS[job_id] = proc
@@ -84,12 +109,12 @@ class Jobs:
             return proc.poll() is None            # poll() also reaps
 
         pid = job["pid"]                          # server restarted since launch
+        if sys.platform == "win32":
+            return _alive_windows(pid)
         try:
-            os.kill(pid, 0)
+            os.kill(pid, 0)                       # POSIX only: a real probe
         except OSError:
             return False
-        if sys.platform == "win32":
-            return True
         try:
             state = subprocess.run(["ps", "-o", "state=", "-p", str(pid)],
                                    capture_output=True, text=True, timeout=10).stdout.strip()
@@ -99,15 +124,18 @@ class Jobs:
 
     def cancel(self, job: dict) -> None:
         pid = job["pid"]
-        try:
-            if sys.platform == "win32":
-                os.kill(pid, signal.SIGTERM)
-            else:
-                os.killpg(os.getpgid(pid), signal.SIGTERM)
-        except OSError:
+        if sys.platform == "win32":
+            # os.killpg / os.getpgid do not exist on Windows at all. taskkill
+            # with /T also takes the SEO Spider child down with the runner.
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                           capture_output=True)
+        else:
             try:
-                os.kill(pid, signal.SIGTERM)
+                os.killpg(os.getpgid(pid), signal.SIGTERM)
             except OSError:
-                pass
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except OSError:
+                    pass
         job["state"] = "cancelled"
         self.write(job)

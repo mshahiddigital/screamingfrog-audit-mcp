@@ -293,3 +293,66 @@ def test_server_module_does_not_shadow_the_mcp_package():
 
     from screaming_frog_mcp import server as srv
     assert getattr(srv, "mcp", sdk) is sdk
+
+
+# ── Windows process safety ───────────────────────────────────────────────────
+
+def test_windows_liveness_never_calls_os_kill(monkeypatch, tmp_path):
+    """On Windows, os.kill with any signal but CTRL_C/CTRL_BREAK routes to
+    TerminateProcess. Using it as a liveness probe would kill the crawl and
+    then report it finished."""
+    from screaming_frog_mcp import jobs as J
+
+    monkeypatch.setattr(J.sys, "platform", "win32")
+
+    def boom(*a, **k):
+        raise AssertionError("os.kill must never be called on Windows")
+
+    monkeypatch.setattr(J.os, "kill", boom)
+    monkeypatch.setattr(J.subprocess, "run",
+                        lambda *a, **k: type("R", (), {"stdout": "runner.exe 4321 Console"})())
+
+    j = J.Jobs(tmp_path)
+    assert j.running({"job_id": "absent", "pid": 4321}) is True
+
+
+def test_windows_liveness_reports_dead_when_pid_absent(monkeypatch, tmp_path):
+    from screaming_frog_mcp import jobs as J
+
+    monkeypatch.setattr(J.sys, "platform", "win32")
+    monkeypatch.setattr(J.subprocess, "run",
+                        lambda *a, **k: type("R", (), {
+                            "stdout": "INFO: No tasks are running which match the criteria."})())
+    j = J.Jobs(tmp_path)
+    assert j.running({"job_id": "absent", "pid": 4321}) is False
+
+
+def test_windows_cancel_uses_taskkill_not_killpg(monkeypatch, tmp_path):
+    """os.killpg and os.getpgid do not exist on Windows at all."""
+    from screaming_frog_mcp import jobs as J
+
+    monkeypatch.setattr(J.sys, "platform", "win32")
+    monkeypatch.setattr(J.os, "kill", lambda *a, **k: (_ for _ in ()).throw(
+        AssertionError("must not signal on Windows")))
+    seen = {}
+    monkeypatch.setattr(J.subprocess, "run",
+                        lambda cmd, **k: seen.setdefault("cmd", cmd))
+
+    j = J.Jobs(tmp_path)
+    job = {"job_id": "x", "pid": 4321, "output_dir": str(tmp_path)}
+    j.cancel(job)
+    assert seen["cmd"][0] == "taskkill"
+    assert "/F" in seen["cmd"]
+    assert job["state"] == "cancelled"
+
+
+def test_posix_liveness_treats_a_zombie_as_finished(monkeypatch, tmp_path):
+    """The original bug: a reaped-less child polls 'running' forever."""
+    from screaming_frog_mcp import jobs as J
+
+    monkeypatch.setattr(J.sys, "platform", "darwin")
+    monkeypatch.setattr(J.os, "kill", lambda *a, **k: None)
+    monkeypatch.setattr(J.subprocess, "run",
+                        lambda *a, **k: type("R", (), {"stdout": "Z+\n"})())
+    j = J.Jobs(tmp_path)
+    assert j.running({"job_id": "absent", "pid": 4321}) is False
