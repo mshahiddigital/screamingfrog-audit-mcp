@@ -3,6 +3,12 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.1] — 2026-08-31
+
+### Changed
+
+- Documentation wording. No functional change; identical code to 1.1.0.
+
 ## [1.1.0] — 2026-08-31
 
 Three tools added and one hardened: a crawl allowlist, server-side
