@@ -1,5 +1,7 @@
 # screaming-frog-mcp
 
+[![CI](https://github.com/mshahiddigital/screaming-frog-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/mshahiddigital/screaming-frog-mcp/actions/workflows/ci.yml) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/) [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 Drive the [Screaming Frog SEO Spider](https://www.screamingfrog.co.uk/seo-spider/)
 from Claude, Cursor, or any other MCP client. Crawl a site, get a ranked issue
 register back, ask questions of the crawl data, and render a shareable report —
@@ -212,6 +214,10 @@ pytest
 
 The test suite runs on synthetic export fixtures, so it passes on a machine
 that has never had Screaming Frog installed.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

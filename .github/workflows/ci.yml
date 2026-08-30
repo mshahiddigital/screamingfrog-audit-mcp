@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    # The Windows job is the point of this matrix. The process handling there
+    # cannot be tested on the author's machine, and the bugs it hides are
+    # severe: os.kill(pid, 0) terminates the process it is probing, os.killpg
+    # does not exist, and start_new_session is silently ignored.
+    name: ${{ matrix.os }} / py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.10", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e ".[dev]"
+      - name: Run tests
+        run: pytest -q
+      - name: Doctor must run and exit non-zero without the Spider
+        shell: bash
+        run: |
+          python -m screaming_frog_mcp --doctor && code=0 || code=$?
+          if [ "$code" != "1" ]; then
+            echo "Expected exit 1 with no SEO Spider installed, got $code"
+            exit 1
+          fi
+
+  sdk-majors:
+    # A fresh resolve of "mcp" now lands on 2.x, where FastMCP was renamed to
+    # MCPServer. Importing under both majors is pinned by a test, but only a
+    # real install of each proves the shim.
+    name: mcp ${{ matrix.spec }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        spec: ["mcp<2", "mcp>=2"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]" "${{ matrix.spec }}"
+      - run: python -c "import importlib.metadata as m; print('mcp', m.version('mcp'))"
+      - run: python -c "from screaming_frog_mcp import server; print('server type:', type(server.server).__name__)"
+      - run: pytest -q
+
+  package:
+    name: Build and check the distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build twine
+      - run: python -m build
+      - run: twine check dist/*
