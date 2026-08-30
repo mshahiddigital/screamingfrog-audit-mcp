@@ -21,47 +21,61 @@ Claude: Three high-priority problems. The big one: robots.txt disallows
 
 ## Install
 
-Needs Python 3.10+ and the Screaming Frog SEO Spider installed locally.
+You need two things: **Python 3.10+** and the **Screaming Frog SEO Spider**
+installed on the same machine ([download](https://www.screamingfrog.co.uk/seo-spider/)).
+The free version is fine.
 
-<details open>
-<summary><b>Claude Code</b></summary>
+### Claude Code
 
 ```bash
-claude mcp add screaming-frog -- uvx screaming-frog-mcp
+claude mcp add screaming-frog -- \
+  uvx --from git+https://github.com/mshahiddigital/screaming-frog-mcp screaming-frog-mcp
 ```
-</details>
 
-<details>
-<summary><b>Claude Desktop / Cursor / any client with a JSON config</b></summary>
+### Claude Desktop, Cursor, or any client with a JSON config
 
 ```json
 {
   "mcpServers": {
     "screaming-frog": {
       "command": "uvx",
-      "args": ["screaming-frog-mcp"]
+      "args": [
+        "--from", "git+https://github.com/mshahiddigital/screaming-frog-mcp",
+        "screaming-frog-mcp"
+      ]
     }
   }
 }
 ```
 
-Claude Desktop's config lives at
-`~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or
-`%APPDATA%\Claude\claude_desktop_config.json` (Windows).
-</details>
+Config file locations:
 
-<details>
-<summary><b>pip instead of uvx</b></summary>
+| Client | Path |
+|---|---|
+| Claude Desktop (macOS) | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Claude Desktop (Windows) | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Cursor | `~/.cursor/mcp.json` |
+
+Restart the client after editing. `uvx` comes with
+[uv](https://docs.astral.sh/uv/getting-started/installation/).
+
+### Prefer pip
 
 ```bash
-pip install screaming-frog-mcp
+pip install git+https://github.com/mshahiddigital/screaming-frog-mcp
 ```
 
-Then use `"command": "screaming-frog-mcp"` with no args.
-</details>
+Then use `"command": "screaming-frog-mcp"` with `"args": []`.
 
-Ask your client to run `check_install` first. It reports what it found, what
-the current limits are, and how to fix it if the Spider isn't where it expected.
+### First run
+
+Ask your client: **"check my screaming frog install"**. It calls `check_install`,
+which reports the binary it found, your tier, and what that tier can do. If the
+Spider isn't found, the answer includes every path it looked in and how to point
+at yours.
+
+> **Not on PyPI yet.** Once it is published, the above shortens to
+> `uvx screaming-frog-mcp`.
 
 ## The free-tier situation
 
