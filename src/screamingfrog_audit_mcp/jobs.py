@@ -70,8 +70,8 @@ class Jobs:
     # ── lifecycle ────────────────────────────────────────────────────────────
 
     def launch(self, args: list[str], out_dir: Path, folder: str, meta: dict) -> dict:
-        """Fork a detached child running `python -m screaming_frog_mcp.runner`."""
-        cmd = [sys.executable, "-u", "-m", "screaming_frog_mcp.runner"] + args
+        """Fork a detached child running `python -m screamingfrog_audit_mcp.runner`."""
+        cmd = [sys.executable, "-u", "-m", "screamingfrog_audit_mcp.runner"] + args
         out_dir.mkdir(parents=True, exist_ok=True)
 
         # Detach so the crawl outlives this server. start_new_session maps to

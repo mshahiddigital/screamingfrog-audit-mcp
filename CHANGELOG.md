@@ -7,6 +7,10 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 First public release. Drive the Screaming Frog SEO Spider from any MCP client.
 
+Published as **`screamingfrog-audit-mcp`**. The obvious name was already taken
+on PyPI by an unrelated project, and the distinguishing feature here is that it
+runs on an unlicensed Spider, so the name leans on the audit surface instead.
+
 ### Added
 
 - **Eleven MCP tools**: `check_install`, `available_filters`, `start_crawl`,

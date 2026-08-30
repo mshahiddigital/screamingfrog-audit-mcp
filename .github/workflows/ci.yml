@@ -32,7 +32,7 @@ jobs:
       - name: Doctor must run and exit non-zero without the Spider
         shell: bash
         run: |
-          python -m screaming_frog_mcp --doctor && code=0 || code=$?
+          python -m screamingfrog_audit_mcp --doctor && code=0 || code=$?
           if [ "$code" != "1" ]; then
             echo "Expected exit 1 with no SEO Spider installed, got $code"
             exit 1
@@ -55,7 +55,7 @@ jobs:
           python-version: "3.12"
       - run: pip install -e ".[dev]" "${{ matrix.spec }}"
       - run: python -c "import importlib.metadata as m; print('mcp', m.version('mcp'))"
-      - run: python -c "from screaming_frog_mcp import server; print('server type:', type(server.server).__name__)"
+      - run: python -c "from screamingfrog_audit_mcp import server; print('server type:', type(server.server).__name__)"
       - run: pytest -q
 
   package:

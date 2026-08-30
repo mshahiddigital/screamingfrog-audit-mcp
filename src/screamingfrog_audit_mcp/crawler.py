@@ -33,7 +33,7 @@ from .finder import find_binary, is_licensed
 FREE_URL_CAP = 500
 BATCH_SIZE = 450
 
-UA = "Mozilla/5.0 (compatible; screaming-frog-mcp/1.0; +https://pypi.org/project/screaming-frog-mcp/)"
+UA = "Mozilla/5.0 (compatible; screamingfrog-audit-mcp/1.0; +https://pypi.org/project/screamingfrog-audit-mcp/)"
 
 # The default export set: the tables that answer the questions people actually
 # ask of a crawl. --skip-empty means a clean site simply produces fewer files.

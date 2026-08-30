@@ -1,6 +1,6 @@
 """The crawl child process.
 
-Run as: python -m screaming_frog_mcp.runner --url https://example.com --output DIR
+Run as: python -m screamingfrog_audit_mcp.runner --url https://example.com --output DIR
 
 Kept separate from the server so the crawl survives the MCP server exiting, and
 so the whole pipeline can be used from a shell without MCP at all.
@@ -19,7 +19,7 @@ from .finder import find_binary, install_hint
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(prog="screaming_frog_mcp.runner")
+    ap = argparse.ArgumentParser(prog="screamingfrog_audit_mcp.runner")
     ap.add_argument("--url", required=True)
     ap.add_argument("--output", required=True)
     ap.add_argument("--full", action="store_true",
