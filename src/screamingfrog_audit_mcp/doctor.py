@@ -103,6 +103,28 @@ def _check_binary_runs() -> tuple[str, str, str]:
     return PASS, f"Binary responds: {len(names)} export filters available", ""
 
 
+def _check_flags() -> tuple[str, str, str]:
+    """Screaming Frog aborts a whole crawl on an unrecognised option, and the
+    option set differs between versions, so this is checked, never assumed."""
+    from .crawler import OPTIONAL_FLAGS, missing_essentials, supported_flags
+
+    flags = supported_flags()
+    if not flags:
+        return (WARN, "Could not read the binary's option list",
+                "Optional flags will be omitted, which is safe.")
+    gone = missing_essentials()
+    if gone:
+        return (FAIL, f"Missing essential options: {', '.join(gone)}",
+                "This Screaming Frog build is too old or too unusual to drive.")
+    unsupported = [f for f in OPTIONAL_FLAGS if f not in flags]
+    if unsupported:
+        return (PASS, f"{len(flags)} options detected; "
+                      f"skipping unsupported {', '.join(unsupported)}",
+                "Those are optional. They are omitted automatically rather than\n"
+                "    passed and crashing the crawl.")
+    return PASS, f"{len(flags)} command-line options detected, all needed ones present", ""
+
+
 def _check_licence() -> tuple[str, str, str]:
     if is_licensed():
         return PASS, f"Licensed (found {LICENCE_FILE})", ""
@@ -164,6 +186,7 @@ def run() -> int:
         ("MCP SDK", _check_sdk),
         ("SEO Spider", _check_binary),
         ("Spider runs", _check_binary_runs),
+        ("CLI options", _check_flags),
         ("Licence", _check_licence),
         ("Audit folder", _check_audit_dir),
         ("Allowlist", _check_allowlist),

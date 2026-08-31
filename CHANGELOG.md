@@ -3,6 +3,39 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.1] — 2026-08-31
+
+### Fixed
+
+- **Every crawl crashed on Screaming Frog 19.8 and other older builds.** The
+  package always passed `--skip-empty`, which those versions do not have, and
+  Screaming Frog does not ignore an unknown option — it aborts before crawling:
+
+  ```
+  FATAL - SeoSpider failed to start
+  org.apache.commons.cli.UnrecognizedOptionException: Unrecognized option
+  ```
+
+  The result was an immediate failure with 0 URLs, on a perfectly good
+  licensed install.
+
+  Command-line options are now **detected from the binary's own `--help`**
+  before use, the same way export-filter names already were. This is feature
+  detection rather than version detection, deliberately: there is no
+  `--version` flag, and what matters is the option set, not the number.
+
+  - Optional flags (`--overwrite`, `--skip-empty`) are passed only when the
+    installed build advertises them, and the run says which it skipped.
+  - If `--help` cannot be read, **no** optional flag is sent. An unknown flag
+    is fatal; a missing optional flag only costs a few empty CSV files.
+  - `--config` on a build without it is refused up front, with an explanation,
+    rather than aborting mid-crawl.
+  - `--crawl-list` missing falls back to spider mode instead of failing.
+  - Missing *essential* options are reported as a clear error rather than a
+    Java stack trace.
+  - `--doctor` gained a **CLI options** check, so a mismatch is visible before
+    a crawl is attempted rather than after it fails.
+
 ## [1.2.0] — 2026-08-31
 
 The report became a deliverable instead of a write-up.

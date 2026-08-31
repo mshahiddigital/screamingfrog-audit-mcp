@@ -39,7 +39,8 @@ except ImportError:                         # mcp 1.x
 
 from . import __version__
 from .analysis import full_analysis, summarize
-from .crawler import FREE_URL_CAP, accepted_names
+from .crawler import (FREE_URL_CAP, OPTIONAL_FLAGS, accepted_names,
+                      missing_essentials, supported_flags)
 from .finder import ENV_BINARY, find_binary, install_hint, is_licensed
 from .jobs import Jobs
 from .report import build as build_report_files
@@ -145,6 +146,14 @@ def check_install() -> dict:
     if binary is None:
         result["how_to_fix"] = install_hint()
         return result
+    flags = supported_flags()
+    result["cli_flags_detected"] = len(flags)
+    result["optional_flags_supported"] = {f: (f in flags) for f in OPTIONAL_FLAGS}
+    gone = missing_essentials()
+    if gone:
+        result["warning"] = (
+            f"This build is missing essential options: {', '.join(gone)}. "
+            "Crawling may not work at all.")
     result["available"] = [
         "headless crawling", "spider, list and sitemap modes",
         "all tab exports", "all saved reports", "sitemap generation",

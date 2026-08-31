@@ -114,6 +114,60 @@ ACCESSIBILITY_KEEP = {
 BOGUS_GROUPS = {"UNDEF"}
 
 _NAME_CACHE: dict[str, set[str]] = {}
+_FLAG_CACHE: set[str] | None = None
+
+# Flags without which nothing works. If one of these is missing the install is
+# too old or too odd to drive, and saying so beats a Java stack trace.
+ESSENTIAL_FLAGS = {"--headless", "--crawl", "--output-folder", "--export-tabs"}
+
+# Flags that improve a run but are not required. Screaming Frog **aborts the
+# entire crawl** on an unrecognised option:
+#     FATAL - SeoSpider failed to start
+#     org.apache.commons.cli.UnrecognizedOptionException
+# so these are only passed when the installed binary advertises them.
+# `--skip-empty` in particular does not exist in 19.8 and crashed every crawl.
+OPTIONAL_FLAGS = ("--overwrite", "--skip-empty")
+
+
+def supported_flags(refresh: bool = False) -> set[str]:
+    """The command-line options THIS install accepts, read from its own --help.
+
+    Feature detection, not version detection: there is no --version flag, and
+    the option set is what actually matters.
+    """
+    global _FLAG_CACHE
+    if _FLAG_CACHE is not None and not refresh:
+        return _FLAG_CACHE
+    binary = find_binary()
+    if binary is None:
+        _FLAG_CACHE = set()
+        return _FLAG_CACHE
+    try:
+        out = subprocess.run(
+            [str(binary), "--help"], capture_output=True, text=True, timeout=180,
+            encoding="utf-8", errors="replace",
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        _FLAG_CACHE = set()
+        return _FLAG_CACHE
+    _FLAG_CACHE = set(re.findall(r"--[a-z0-9][a-z0-9-]*", out))
+    return _FLAG_CACHE
+
+
+def missing_essentials() -> list[str]:
+    flags = supported_flags()
+    if not flags:                      # could not read help: do not guess
+        return []
+    return sorted(ESSENTIAL_FLAGS - flags)
+
+
+def _usable(flag: str) -> bool:
+    """Only pass an optional flag the binary actually advertises.
+
+    When --help cannot be read the answer is NO: an unknown flag is fatal,
+    while a missing optional flag merely costs a few empty CSV files.
+    """
+    return flag in supported_flags()
 
 
 # ────────────────────────────────────────────────────── filter-name validation
@@ -226,10 +280,20 @@ def export_args(out_dir: Path, everything: bool = False,
         for name in dropped_r + dropped_t:
             print(f"  Skipping unrecognised export: {name}")
 
-    args = ["--headless", "--output-folder", str(out_dir), "--overwrite", "--skip-empty"]
+    args = ["--headless", "--output-folder", str(out_dir)]
+    for flag in OPTIONAL_FLAGS:
+        if _usable(flag):
+            args.append(flag)
+        else:
+            print(f"  Skipping {flag}: this Screaming Frog build does not support it",
+                  flush=True)
     if config:
+        if not _usable("--config"):
+            raise RuntimeError(
+                "This Screaming Frog build does not support --config, so passing a "
+                "config file would abort the crawl. Re-run without config.")
         args += ["--config", str(Path(config).expanduser())]
-    if reports:
+    if reports and _usable("--save-report"):
         args += ["--save-report", ",".join(reports)]
     if tabs:
         args += ["--export-tabs", ",".join(tabs)]
@@ -310,6 +374,11 @@ def run_spider(binary: Path, url: str, out_dir: Path, everything: bool,
 def run_chunked(binary: Path, url: str, out_dir: Path, everything: bool,
                 config: str | None = None) -> int:
     """Sitemap-driven list-mode crawl in batches, to beat the free URL cap."""
+    if not _usable("--crawl-list"):
+        print("This build has no --crawl-list, so batching is unavailable. "
+              "Falling back to spider mode.", flush=True)
+        return run_spider(binary, url, out_dir, everything, config)
+
     urls = collect_urls(url)
     if not urls:
         print("No sitemap URLs found, falling back to spider mode.", flush=True)

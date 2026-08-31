@@ -669,3 +669,94 @@ def test_sheet_names_are_excel_safe():
     first = _safe_sheet_name("internal_all", t)
     second = _safe_sheet_name("internal_all", t)
     assert first != second
+
+
+# ── version compatibility (Screaming Frog 19.8 regression) ───────────────────
+
+# What an older build advertises. Note: no --skip-empty. Passing it to 19.8
+# aborts the whole crawl with UnrecognizedOptionException, which is exactly
+# what a user hit on Windows.
+_OLD_HELP_FLAGS = {
+    "--headless", "--crawl", "--crawl-list", "--output-folder", "--overwrite",
+    "--export-tabs", "--save-report", "--config", "--help",
+}
+
+
+def _fake_build(monkeypatch, flags):
+    from screamingfrog_audit_mcp import crawler as c
+
+    monkeypatch.setattr(c, "_FLAG_CACHE", set(flags))
+    monkeypatch.setattr(c, "accepted_names", lambda kind: set())
+    return c
+
+
+def test_skip_empty_is_never_sent_to_a_build_without_it(tmp_path, monkeypatch):
+    """The 19.8 crash: one unrecognised flag aborts the entire crawl."""
+    c = _fake_build(monkeypatch, _OLD_HELP_FLAGS)
+    args = c.export_args(tmp_path)
+    assert "--skip-empty" not in args
+    assert "--overwrite" in args          # this one IS supported, so keep it
+    assert "--headless" in args
+
+
+def test_skip_empty_is_sent_when_the_build_supports_it(tmp_path, monkeypatch):
+    c = _fake_build(monkeypatch, _OLD_HELP_FLAGS | {"--skip-empty"})
+    assert "--skip-empty" in c.export_args(tmp_path)
+
+
+def test_unknown_option_set_means_omit_every_optional_flag(tmp_path, monkeypatch):
+    """If --help cannot be read we must not guess: an unknown flag is fatal,
+    a missing optional flag only costs a few empty CSVs."""
+    c = _fake_build(monkeypatch, set())
+    args = c.export_args(tmp_path)
+    for flag in c.OPTIONAL_FLAGS:
+        assert flag not in args
+    assert "--headless" in args and "--output-folder" in args
+
+
+def test_config_is_refused_rather_than_crashing_the_crawl(tmp_path, monkeypatch):
+    c = _fake_build(monkeypatch, _OLD_HELP_FLAGS - {"--config"})
+    cfg = tmp_path / "x.seospiderconfig"
+    cfg.write_text("x", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="does not support --config"):
+        c.export_args(tmp_path, config=str(cfg))
+
+
+def test_missing_essential_flags_are_reported(monkeypatch):
+    c = _fake_build(monkeypatch, {"--help"})
+    gone = c.missing_essentials()
+    assert "--headless" in gone and "--crawl" in gone
+
+
+def test_no_essentials_reported_when_help_is_unreadable(monkeypatch):
+    """Empty means 'unknown', not 'everything is missing'."""
+    c = _fake_build(monkeypatch, set())
+    assert c.missing_essentials() == []
+
+
+def test_supported_flags_parses_real_help_output(monkeypatch):
+    from screamingfrog_audit_mcp import crawler as c
+
+    help_text = (
+        "Usage: ScreamingFrogSEOSpider options\n\n"
+        "Options:\n"
+        "    --crawl <url>\n         Start crawling the supplied URL\n"
+        "    --headless\n         Run in headless mode\n"
+        "    --export-tabs <tabs>\n         Supply a comma separated list\n"
+    )
+    monkeypatch.setattr(c, "_FLAG_CACHE", None)
+    monkeypatch.setattr(c, "find_binary", lambda: Path("/fake/sf"))
+    monkeypatch.setattr(c.subprocess, "run",
+                        lambda *a, **k: type("R", (), {"stdout": help_text})())
+    flags = c.supported_flags(refresh=True)
+    assert flags == {"--crawl", "--headless", "--export-tabs"}
+
+
+def test_doctor_flags_check_fails_on_a_broken_build(monkeypatch):
+    from screamingfrog_audit_mcp import crawler as c
+    from screamingfrog_audit_mcp import doctor as doc
+
+    monkeypatch.setattr(c, "_FLAG_CACHE", {"--help"})
+    status, message, _ = doc._check_flags()
+    assert status == doc.FAIL
+    assert "Missing essential options" in message

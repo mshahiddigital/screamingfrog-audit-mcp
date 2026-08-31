@@ -235,6 +235,11 @@ python -m screamingfrog_audit_mcp.runner --url https://example.com --output ./au
 
 ## Gotchas found the hard way
 
+- **An unknown command-line flag aborts the whole crawl**, it is not ignored:
+  `FATAL - SeoSpider failed to start ... UnrecognizedOptionException`. The
+  option set differs between versions — `--skip-empty` does not exist in 19.8,
+  for instance — so this server reads the binary's own `--help` and passes only
+  what your build advertises. Works on old and new versions alike.
 - **One wrong filter name aborts the whole crawl.** Screaming Frog renames tab
   filters between versions, and an unrecognised name fails the run with a Java
   stack trace rather than skipping it. Every name is validated against your
