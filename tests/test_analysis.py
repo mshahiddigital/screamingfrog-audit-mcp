@@ -590,3 +590,82 @@ def test_storage_summary_reports_sizes(tmp_path, monkeypatch):
     assert out["largest"][0]["crawl"] == "site-2026-08-31"
     assert out["largest"][0]["files"] == 1
     assert out["total_mb"] >= 0
+
+
+# ── branding and the master workbook ─────────────────────────────────────────
+
+def test_every_output_carries_the_credit(crawl):
+    """The whole point of the branding: no generated artefact loses it."""
+    from screamingfrog_audit_mcp import branding as B
+
+    out = report.build(crawl, "Example Co")
+    md = Path(out["markdown"]).read_text(encoding="utf-8")
+    html = Path(out["html"]).read_text(encoding="utf-8")
+
+    for text in (md, html):
+        assert B.AUTHOR in text
+        assert B.AUTHOR_SITE_SHORT in text
+    assert B.AUTHOR_SITE in html          # a real, clickable link
+    assert B.STUDIO in html
+
+
+def test_html_uses_the_brand_palette(crawl):
+    from screamingfrog_audit_mcp import branding as B
+
+    html = Path(report.build(crawl, "Example Co")["html"]).read_text(encoding="utf-8")
+    assert B.css(B.PURPLE) in html
+    assert B.css(B.CREAM) in html
+    assert 'class="masthead"' in html
+
+
+def test_workbook_has_a_sheet_for_every_export(crawl):
+    from openpyxl import load_workbook
+
+    out = report.build(crawl, "Example Co")
+    wb = load_workbook(out["workbook"])
+    # Summary + Issue register + Analysis + Data index + one per non-empty export
+    exports = [p for p in crawl.glob("*.csv")]
+    assert out["data_tables"] == len(exports)
+    for fixed in ("Summary", "Issue register", "Analysis", "Data index"):
+        assert fixed in wb.sheetnames
+
+
+def test_workbook_highlights_priority_as_colour(crawl):
+    """A reader must see severity without reading the word."""
+    from openpyxl import load_workbook
+
+    from screamingfrog_audit_mcp import branding as B
+
+    wb = load_workbook(report.build(crawl, "Example Co")["workbook"])
+    ws = wb["Issue register"]
+    assert ws["A5"].fill.fgColor.rgb.endswith(B.PURPLE)     # header
+    chips = {ws.cell(row=r, column=1).value:
+             ws.cell(row=r, column=1).fill.fgColor.rgb for r in range(6, 9)}
+    assert any(v.endswith(B.RED) for v in chips.values())
+    assert any(v.endswith(B.AMBER) for v in chips.values())
+
+
+def test_workbook_sheets_are_navigable(crawl):
+    """Frozen header, autofilter and a coloured tab on every data sheet."""
+    from openpyxl import load_workbook
+
+    wb = load_workbook(report.build(crawl, "Example Co")["workbook"])
+    ws = wb["internal all"]
+    assert ws.freeze_panes == "A2"
+    assert ws.auto_filter.ref is not None
+    assert ws.sheet_properties.tabColor is not None
+    assert ws.sheet_view.showGridLines is False
+
+
+def test_sheet_names_are_excel_safe():
+    from screamingfrog_audit_mcp.workbook import _safe_sheet_name
+
+    taken = set()
+    long = _safe_sheet_name("a" * 60, taken)
+    assert len(long) <= 31
+    assert _safe_sheet_name("has/bad:chars*", set()) == "has-bad-chars-"
+    # duplicates must not collide, Excel refuses two sheets with one name
+    t = set()
+    first = _safe_sheet_name("internal_all", t)
+    second = _safe_sheet_name("internal_all", t)
+    assert first != second

@@ -3,6 +3,33 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] — 2026-08-31
+
+The report became a deliverable instead of a write-up.
+
+### Added
+
+- **`audit-workbook.xlsx` — the master workbook.** `build_report` now writes a
+  full Excel workbook: Summary, Issue register, Analysis, a Data index, and
+  **every crawl export as its own sheet**. On a full crawl that is ~70 data
+  tables, where before none of the raw data reached the deliverable at all.
+- **Highlighting, which is what makes it an audit rather than a data dump.**
+  Cells are tinted where the value *is* the finding: issue priority as a
+  coloured chip with a tinted row, 4xx/5xx status codes, non-indexable URLs,
+  thin content under 300 words, responses over one second. A reader sees the
+  problems before reading a cell.
+- **Every sheet is navigable:** purple header row, banded rows, frozen header,
+  autofilter, sized columns, coloured tab, gridlines off.
+- **Brand identity across all output.** The workbook, HTML and Markdown carry
+  one palette and one credit line naming the author and site.
+
+### Changed
+
+- The HTML report is rebuilt on the brand palette with a gradient masthead,
+  priority-tinted issue rows, and print rules that keep colour when saved to
+  PDF.
+- `openpyxl` is now a dependency.
+
 ## [1.1.1] — 2026-08-31
 
 ### Changed

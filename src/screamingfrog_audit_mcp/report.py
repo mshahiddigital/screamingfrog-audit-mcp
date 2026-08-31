@@ -14,38 +14,61 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from . import branding as B
+from . import workbook
 from .analysis import full_analysis, summarize
 
 CSS = """
-:root{--bg:#fff;--fg:#16181d;--muted:#646b7a;--line:#e4e7ec;--card:#f7f8fa;
---high:#c02626;--med:#b06a00;--low:#5b6472;--accent:#2c5fd8}
-@media (prefers-color-scheme:dark){:root{--bg:#14161a;--fg:#e8eaed;--muted:#9aa3b2;
---line:#2a2e36;--card:#1c1f25;--high:#ff6b6b;--med:#e2a03f;--low:#8b94a3;--accent:#7aa2f7}}
+:root{
+  --bg:#F5F0E8; --surface:#FBF6EC; --card:#EFE7D6;
+  --ink:#111827; --ink2:#374151; --muted:#6B7280; --line:#E6DED1;
+  --brand:#9D0BC4; --brand2:#B80CF2;
+  --high:#DC2626; --med:#D97706; --low:#6B7280; --good:#16A34A;
+}
 *{box-sizing:border-box}
-body{margin:0;padding:2.5rem 1.25rem;background:var(--bg);color:var(--fg);
-font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
-main{max-width:60rem;margin:0 auto}
-h1{font-size:1.9rem;margin:0 0 .25rem}
-h2{font-size:1.2rem;margin:2.5rem 0 .75rem;padding-bottom:.4rem;border-bottom:1px solid var(--line)}
-h3{font-size:1rem;margin:1.5rem 0 .5rem}
-.sub{color:var(--muted);margin:0 0 2rem}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.75rem;margin:1rem 0}
-.stat{background:var(--card);border:1px solid var(--line);border-radius:.5rem;padding:.85rem}
-.stat b{display:block;font-size:1.6rem;line-height:1.2}
-.stat span{color:var(--muted);font-size:.8rem}
-.wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-table{border-collapse:collapse;width:100%;font-size:.85rem;margin:.5rem 0}
-th,td{text-align:left;padding:.5rem .6rem;border-bottom:1px solid var(--line);vertical-align:top}
-th{color:var(--muted);font-weight:600;white-space:nowrap}
+body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+main{max-width:62rem;margin:0 auto;padding:0 1.25rem 3rem}
+.masthead{background:linear-gradient(135deg,var(--brand) 0%,var(--brand2) 100%);
+color:#fff;padding:2.5rem 1.25rem 2rem;margin-bottom:2rem}
+.masthead .inner{max-width:62rem;margin:0 auto}
+.masthead h1{font-size:2rem;margin:0 0 .35rem;letter-spacing:-.02em}
+.masthead .site{font-size:1.05rem;opacity:.95;margin:0}
+.masthead .by{margin:1rem 0 0;font-size:.85rem;opacity:.85}
+.masthead .by a{color:#fff;text-decoration:underline}
+h2{font-size:1.15rem;margin:2.5rem 0 .75rem;padding-bottom:.45rem;
+border-bottom:2px solid var(--brand)}
+h3{font-size:.98rem;margin:1.6rem 0 .5rem;color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));gap:.75rem;margin:1rem 0}
+.stat{background:var(--surface);border:1px solid var(--line);
+border-left:4px solid var(--brand);border-radius:.4rem;padding:.9rem}
+.stat b{display:block;font-size:1.75rem;line-height:1.15;color:var(--ink)}
+.stat span{color:var(--muted);font-size:.78rem}
+.score b{color:var(--brand)}
+.wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;
+border:1px solid var(--line);border-radius:.4rem;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.85rem}
+th,td{text-align:left;padding:.55rem .65rem;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--brand);color:#fff;font-weight:600;white-space:nowrap;
+position:sticky;top:0}
+tbody tr:nth-child(even){background:#FBF6EC}
 td.u{word-break:break-all;max-width:28rem}
-.chip{display:inline-block;padding:.1rem .5rem;border-radius:1rem;font-size:.75rem;
-font-weight:600;color:#fff}
+.chip{display:inline-block;padding:.12rem .55rem;border-radius:1rem;font-size:.72rem;
+font-weight:700;color:#fff;letter-spacing:.02em}
 .High{background:var(--high)}.Medium{background:var(--med)}.Low{background:var(--low)}
-.note{color:var(--muted);font-size:.85rem;margin:.4rem 0 0}
-footer{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--line);
-color:var(--muted);font-size:.8rem}
-@media print{body{padding:0;font-size:11pt}h2{page-break-after:avoid}
-table{page-break-inside:auto}tr{page-break-inside:avoid}.stat{break-inside:avoid}}
+tr.r-High td{background:#FDE8E8}
+tr.r-Medium td{background:#FEF3E2}
+.note{color:var(--muted);font-size:.85rem;margin:.45rem 0 0}
+footer{margin-top:3rem;padding:1.5rem 1.25rem;background:var(--card);
+border-top:3px solid var(--brand);color:var(--ink2);font-size:.85rem}
+footer .inner{max-width:62rem;margin:0 auto}
+footer a{color:var(--brand);font-weight:600}
+@media print{
+  body{background:#fff}
+  .masthead{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  th{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  h2{page-break-after:avoid} tr{page-break-inside:avoid} .stat{break-inside:avoid}
+}
 """
 
 
@@ -53,12 +76,15 @@ def _e(v) -> str:
     return html.escape(str(v if v is not None else ""))
 
 
-def _table(headers: list[str], rows: list[list], empty: str = "Nothing found.") -> str:
+def _table(headers: list[str], rows: list[list], empty: str = "Nothing found.",
+           row_classes: list[str] | None = None) -> str:
     if not rows:
         return f'<p class="note">{_e(empty)}</p>'
     head = "".join(f"<th>{_e(h)}</th>" for h in headers)
+    classes = row_classes or [""] * len(rows)
     body = "".join(
-        "<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in rows
+        f'<tr class="{cls}">' + "".join(f"<td>{c}</td>" for c in r) + "</tr>"
+        for r, cls in zip(rows, classes)
     )
     return f'<div class="wrap"><table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
 
@@ -70,7 +96,9 @@ def markdown_report(summary: dict, analysis: dict, label: str) -> str:
     s = summary["stats"]
     c = summary["counts"]
     out = [
-        f"# Technical SEO crawl: {label}",
+        f"# Technical SEO Audit: {label}",
+        "",
+        f"*{B.CREDIT_LINE}*",
         "",
         f"Crawled {summary['crawled_at']} | {s['urls']} URLs | "
         f"health {h['score']}/100 ({h['band']})",
@@ -126,9 +154,9 @@ def markdown_report(summary: dict, analysis: dict, label: str) -> str:
             out += [f"### {i['issue']} ({i['priority']}, {i['urls']} URLs)",
                     "", i["how_to_fix"], ""]
 
-    out += ["", "---", "",
-            "Generated by screamingfrog-audit-mcp. Data from Screaming Frog SEO Spider.",
-            "Issue names, descriptions and fix guidance are Screaming Frog's own."]
+    out += ["", "---", "", f"**{B.CREDIT_LONG}**", "",
+            "Crawl data from Screaming Frog SEO Spider; issue names, descriptions "
+            "and fix guidance are Screaming Frog's own."]
     return "\n".join(out) + "\n"
 
 
@@ -142,6 +170,7 @@ def html_report(summary: dict, analysis: dict, label: str) -> str:
          _e(i["type"]), i["urls"], _e(i["issue"])]
         for i in summary["issues"]
     ]
+    issue_classes = [f'r-{i["priority"]}' for i in summary["issues"]]
 
     d, le, ct = analysis["depth"], analysis["link_equity"], analysis["content"]
     perf, dup, ix = analysis["performance"], analysis["duplication"], analysis["indexability"]
@@ -182,17 +211,23 @@ def html_report(summary: dict, analysis: dict, label: str) -> str:
                      [[_e(k), v] for k, v in ix["reasons"].items()],
                      "Everything crawled is indexable.")
 
+    band_label, _ = B.band(h["score"])
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Technical SEO crawl: {_e(label)}</title>
-<style>{CSS}</style></head><body><main>
-<h1>Technical SEO crawl</h1>
-<p class="sub">{_e(label)} &middot; {_e(summary['crawled_at'])}</p>
+<title>{_e(B.report_title(label))}</title>
+<style>{CSS}</style></head><body>
+<header class="masthead"><div class="inner">
+  <h1>Technical SEO Audit</h1>
+  <p class="site">{_e(label)} &middot; {_e(summary['crawled_at'])}</p>
+  <p class="by">Prepared with <strong>{_e(B.TOOL)}</strong> by {_e(B.AUTHOR)},
+     {_e(B.STUDIO)} &middot; <a href="{_e(B.AUTHOR_SITE)}">{_e(B.AUTHOR_SITE_SHORT)}</a></p>
+</div></header>
+<main>
 
 <div class="grid">
   <div class="stat"><b>{s['urls']}</b><span>URLs crawled</span></div>
-  <div class="stat"><b>{h['score']}</b><span>Health / 100 ({_e(h['band'])})</span></div>
+  <div class="stat score"><b>{h['score']}</b><span>Health / 100 ({_e(band_label)})</span></div>
   <div class="stat"><b>{c['high']}</b><span>High priority</span></div>
   <div class="stat"><b>{c['medium']}</b><span>Medium priority</span></div>
   <div class="stat"><b>{s['indexable']}</b><span>Indexable</span></div>
@@ -201,7 +236,7 @@ def html_report(summary: dict, analysis: dict, label: str) -> str:
 <p class="note">Health score: {_e(h['formula'])}</p>
 
 <h2>Issue register</h2>
-{_table(["Priority", "Type", "URLs", "Issue"], issue_rows, "No issues reported.")}
+{_table(["Priority", "Type", "URLs", "Issue"], issue_rows, "No issues reported.", issue_classes)}
 
 <h2>What the set of URLs means</h2>
 {section_html}
@@ -214,10 +249,13 @@ def html_report(summary: dict, analysis: dict, label: str) -> str:
 {"".join(f"<h3>{_e(i['issue'])}</h3><p>{_e(i['how_to_fix'])}</p>"
          for i in summary["issues"] if i["how_to_fix"]) or '<p class="note">Nothing to fix.</p>'}
 
-<footer>Generated by screamingfrog-audit-mcp. Data from Screaming Frog SEO Spider;
-issue names, descriptions and fix guidance are Screaming Frog&rsquo;s own.
-Print this page to save it as a PDF.</footer>
-</main></body></html>
+</main>
+<footer><div class="inner">
+  <p><strong>{_e(B.CREDIT_LONG)}</strong></p>
+  <p class="note">Crawl data from Screaming Frog SEO Spider; issue names, descriptions
+  and fix guidance are Screaming Frog&rsquo;s own. Print this page to save it as a PDF.</p>
+</div></footer>
+</body></html>
 """
 
 
@@ -240,7 +278,7 @@ def build(folder: Path, label: str = "") -> dict:
     md.write_text(markdown_report(summary, analysis, label), encoding="utf-8")
     page.write_text(html_report(summary, analysis, label), encoding="utf-8")
 
-    return {
+    result = {
         "label": label,
         "health": summary["health"],
         "markdown": str(md),
@@ -248,3 +286,16 @@ def build(folder: Path, label: str = "") -> dict:
         "analysis_json": str(folder / "analysis.json"),
         "generated_at": datetime.now().isoformat(timespec="seconds"),
     }
+
+    # The master workbook: every export as its own styled, highlighted sheet.
+    try:
+        book = workbook.build(folder, summary, analysis, label,
+                              folder / "audit-workbook.xlsx")
+        result["workbook"] = book["path"]
+        result["sheets"] = book["sheets"]
+        result["data_tables"] = book["data_tables"]
+    except ImportError:
+        result["workbook_error"] = (
+            "openpyxl is not installed, so the workbook was skipped. "
+            "pip install openpyxl")
+    return result

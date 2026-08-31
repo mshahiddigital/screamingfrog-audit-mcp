@@ -685,15 +685,25 @@ def delete_crawl(crawl: str, confirm: bool = False) -> dict:
 
 @server.tool()
 def build_report(crawl: str, label: str = "") -> dict:
-    """Write a shareable write-up of a finished crawl into its folder:
-    report.md, a self-contained printable report.html, and analysis.json.
+    """Write the branded deliverable for a finished crawl into its folder.
 
-    The HTML is styled, responsive, light and dark aware, and has print rules,
-    so opening it and printing to PDF produces a clean document. There is no
-    bundled PDF step, deliberately: shipping a headless browser to print a page
-    your browser already prints is a bad trade.
+    Produces four files:
+      audit-workbook.xlsx  the master workbook — Summary, Issue register,
+                           Analysis, a Data index, and EVERY crawl export as
+                           its own styled sheet. Purple headers, banded rows,
+                           frozen panes, autofilter, coloured tabs, and cells
+                           highlighted where the value IS the finding: issue
+                           priority, 4xx/5xx status, non-indexable, thin
+                           content, slow responses.
+      report.html          printable, brand-coloured, with a masthead
+      report.md            the same content as plain text
+      analysis.json        the derived layer, machine-readable
 
-    label  display name in the report (default: the crawled site)
+    There is no bundled PDF step, deliberately: shipping a headless browser to
+    print a page your browser already prints is a bad trade. Open the HTML and
+    use Print to PDF; the stylesheet has print rules.
+
+    label  the audited business or site name shown on the report
     """
     folder = _resolve(crawl)
     if not folder.exists():

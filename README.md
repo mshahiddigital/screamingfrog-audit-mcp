@@ -142,7 +142,7 @@ the same.
 | `aggregate_export` | **Counts and group-by without returning rows** — "how many 404s", "status codes by folder" — in one small response |
 | `storage_summary` | Disk used per saved crawl, largest first |
 | `delete_crawl` | Permanently delete a crawl folder (requires `confirm`) |
-| `build_report` | `report.md` + a printable, self-contained `report.html` + `analysis.json` |
+| `build_report` | The branded deliverable: **`audit-workbook.xlsx`** (Summary, Issue register, Analysis, Data index, and every export as its own highlighted sheet), a printable `report.html`, `report.md` and `analysis.json` |
 
 ## Two design decisions worth knowing
 
@@ -158,6 +158,24 @@ caps at 500 rows, lets you pick columns, and truncates long cells. Ask
 `aggregate_export` when the question is "how many" or "broken down by", since
 counting rows by hand through a model is the expensive way to get a number.
 Reach for `read_export` only when you actually need the rows.
+
+## The deliverable
+
+`build_report` writes four files into the crawl folder:
+
+| File | What it is |
+|---|---|
+| `audit-workbook.xlsx` | The master workbook. Summary, Issue register, Analysis, Data index, and **every crawl export as its own sheet** — around 70 tables on a full crawl |
+| `report.html` | Printable summary. Open it and Print to PDF |
+| `report.md` | The same content as plain text |
+| `analysis.json` | The derived layer, machine-readable |
+
+Every sheet has a frozen header, autofilter, banded rows, sized columns and a
+coloured tab. **Cells are highlighted where the value is the finding** — issue
+priority, 4xx/5xx status codes, non-indexable URLs, thin content, slow
+responses — so the problems are visible before you read a cell.
+
+Reports carry a credit line naming the tool and its author.
 
 ## Where crawls are stored
 
