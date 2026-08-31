@@ -162,12 +162,25 @@ def missing_essentials() -> list[str]:
 
 
 def _usable(flag: str) -> bool:
-    """Only pass an optional flag the binary actually advertises.
+    """Strict: pass only if the binary positively advertises the flag.
 
-    When --help cannot be read the answer is NO: an unknown flag is fatal,
-    while a missing optional flag merely costs a few empty CSV files.
+    For NEWER flags. When --help cannot be read the answer is no, because an
+    unknown flag is fatal while a missing optional flag only costs a few empty
+    CSV files. `--skip-empty` is the case this exists for.
     """
     return flag in supported_flags()
+
+
+def _usable_or_unknown(flag: str) -> bool:
+    """Lenient: pass unless the binary positively says it lacks the flag.
+
+    For LONG-STANDING flags the product depends on. Dropping `--save-report`
+    just because --help was unreadable would silently discard the Issues
+    Overview, which is the audit itself. Only a build that actually lists its
+    options, minus this one, gets it withheld.
+    """
+    flags = supported_flags()
+    return (not flags) or (flag in flags)
 
 
 # ────────────────────────────────────────────────────── filter-name validation
@@ -288,12 +301,12 @@ def export_args(out_dir: Path, everything: bool = False,
             print(f"  Skipping {flag}: this Screaming Frog build does not support it",
                   flush=True)
     if config:
-        if not _usable("--config"):
+        if not _usable_or_unknown("--config"):
             raise RuntimeError(
                 "This Screaming Frog build does not support --config, so passing a "
                 "config file would abort the crawl. Re-run without config.")
         args += ["--config", str(Path(config).expanduser())]
-    if reports and _usable("--save-report"):
+    if reports and _usable_or_unknown("--save-report"):
         args += ["--save-report", ",".join(reports)]
     if tabs:
         args += ["--export-tabs", ",".join(tabs)]
@@ -374,7 +387,7 @@ def run_spider(binary: Path, url: str, out_dir: Path, everything: bool,
 def run_chunked(binary: Path, url: str, out_dir: Path, everything: bool,
                 config: str | None = None) -> int:
     """Sitemap-driven list-mode crawl in batches, to beat the free URL cap."""
-    if not _usable("--crawl-list"):
+    if not _usable_or_unknown("--crawl-list"):
         print("This build has no --crawl-list, so batching is unavailable. "
               "Falling back to spider mode.", flush=True)
         return run_spider(binary, url, out_dir, everything, config)

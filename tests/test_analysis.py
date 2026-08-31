@@ -248,6 +248,7 @@ def test_config_unlocks_the_custom_groups():
 
 def test_export_args_passes_config_through(tmp_path, monkeypatch):
     monkeypatch.setattr(crawler, "accepted_names", lambda kind: set())
+    monkeypatch.setattr(crawler, "_FLAG_CACHE", {"--config"})
     cfg = tmp_path / "my.seospiderconfig"
     cfg.write_text("x", encoding="utf-8")
     args = crawler.export_args(tmp_path, everything=False, config=str(cfg))
@@ -265,6 +266,7 @@ def test_unknown_filter_names_are_dropped_not_passed_through(tmp_path, monkeypat
     filtered out rather than forwarded."""
     monkeypatch.setattr(crawler, "accepted_names",
                         lambda kind: {"Internal:All", "Crawl Overview"})
+    monkeypatch.setattr(crawler, "_FLAG_CACHE", set())   # unknown build
     args = crawler.export_args(tmp_path)
     tabs = args[args.index("--export-tabs") + 1]
     reports = args[args.index("--save-report") + 1]
@@ -760,3 +762,24 @@ def test_doctor_flags_check_fails_on_a_broken_build(monkeypatch):
     status, message, _ = doc._check_flags()
     assert status == doc.FAIL
     assert "Missing essential options" in message
+
+
+def test_core_exports_survive_an_unreadable_help(tmp_path, monkeypatch):
+    """Dropping --save-report because --help was unreadable would silently
+    discard the Issues Overview, which IS the audit."""
+    from screamingfrog_audit_mcp import crawler as c
+
+    monkeypatch.setattr(c, "_FLAG_CACHE", set())
+    monkeypatch.setattr(c, "accepted_names", lambda kind: {"Internal:All", "Crawl Overview"})
+    args = c.export_args(tmp_path)
+    assert "--save-report" in args
+    assert "--export-tabs" in args
+    assert "--skip-empty" not in args      # newer flag, still withheld
+
+
+def test_long_standing_flag_is_withheld_only_when_the_build_denies_it(tmp_path, monkeypatch):
+    from screamingfrog_audit_mcp import crawler as c
+
+    monkeypatch.setattr(c, "accepted_names", lambda kind: {"Crawl Overview"})
+    monkeypatch.setattr(c, "_FLAG_CACHE", {"--headless", "--export-tabs"})  # no --save-report
+    assert "--save-report" not in c.export_args(tmp_path)

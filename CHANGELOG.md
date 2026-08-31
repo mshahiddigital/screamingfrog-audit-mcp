@@ -33,6 +33,13 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   - `--crawl-list` missing falls back to spider mode instead of failing.
   - Missing *essential* options are reported as a clear error rather than a
     Java stack trace.
+  - Two levels of gating, because they are not the same risk. **Newer** flags
+    (`--skip-empty`, `--overwrite`) are withheld unless positively advertised.
+    **Long-standing** flags the product depends on (`--save-report`,
+    `--crawl-list`, `--config`) are withheld only when a build lists its
+    options and this one is absent — dropping `--save-report` on an unreadable
+    `--help` would have silently discarded the Issues Overview, which is the
+    audit itself.
   - `--doctor` gained a **CLI options** check, so a mismatch is visible before
     a crawl is attempted rather than after it fails.
 
