@@ -97,6 +97,35 @@ command = "uvx"
 args = ["screamingfrog-audit-mcp"]
 ```
 
+### ChatGPT desktop app (Codex)
+
+The ChatGPT app bundles Codex and reads the **same** `~/.codex/config.toml`, so
+the command above configures both. Nothing extra to do — restart the app and
+the tools appear in Codex.
+
+> **ChatGPT on the web or mobile cannot use this server.** Those connectors call
+> a remote HTTPS endpoint, and this server is a local process that drives the
+> Screaming Frog installed on *your* machine. It has to run where the Spider is.
+
+### Hermes
+
+```bash
+hermes mcp add screaming-frog --command uvx --args screamingfrog-audit-mcp
+```
+
+It connects, lists the tools it found, and asks which to enable — answer `Y` for
+all 14. Confirm with `hermes mcp list`, then start a new session. The entry
+lands in `~/.hermes/config.yaml`, which you can also edit directly:
+
+```yaml
+mcp_servers:
+  screaming-frog:
+    command: uvx
+    args:
+      - screamingfrog-audit-mcp
+    enabled: true
+```
+
 ### Cursor
 
 Settings → MCP → **Add new global MCP server**, or edit `~/.cursor/mcp.json`
@@ -132,8 +161,12 @@ for every workspace. VS Code uses `servers`, not `mcpServers`:
 
 ### Any other MCP client
 
-It is a standard stdio server. Whatever the config shape, the command is
+It is a standard **stdio** server: whatever the config shape, the command is
 `uvx` and the argument is `screamingfrog-audit-mcp`.
+
+The one requirement is that the client launches local processes on the machine
+where Screaming Frog is installed. Clients that only accept a remote HTTPS
+endpoint cannot drive a local crawler, whatever the config says.
 
 ### Optional settings
 
