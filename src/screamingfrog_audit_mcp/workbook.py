@@ -63,6 +63,9 @@ class BrandedWorkbook:
         self.wb = Workbook()
         self.wb.remove(self.wb.active)
         self._names: set[str] = set()
+        # export filename -> what its sheet actually holds. consolidate() will
+        # not delete a CSV unless its entry here says the sheet is complete.
+        self.carried: dict[str, dict] = {}
 
         self.hdr_fill = _fill(B.PURPLE)
         self.hdr_font = Font(color=B.WHITE, bold=True, size=10, name=FONT)
@@ -276,14 +279,15 @@ class BrandedWorkbook:
                 headers = next(reader)
             except StopIteration:
                 return None
-            rows = []
-            for i, row in enumerate(reader):
-                if i >= MAX_ROWS_PER_SHEET:
-                    break
-                rows.append(row)
+            rows, total = [], 0
+            for row in reader:
+                total += 1
+                if len(rows) < MAX_ROWS_PER_SHEET:
+                    rows.append(row)
 
         if not rows:
             return None
+        truncated = total > len(rows)
 
         ws = self.sheet(path.stem, B.CARD_SAND)
         for i, h in enumerate(headers, 1):
@@ -295,11 +299,17 @@ class BrandedWorkbook:
         self._style_table(ws, 1, len(headers), len(rows))
         self._highlight(ws, headers, len(rows))
         self._autosize(ws, len(headers))
+        # Recorded so the caller can tell a complete sheet from a sampled one.
+        # Only a complete sheet may stand in for its CSV.
+        self.carried[path.name] = {
+            "sheet": ws.title, "rows_written": len(rows), "rows_total": total,
+            "columns": len(headers), "complete": not truncated,
+        }
 
-        if len(rows) >= MAX_ROWS_PER_SHEET:
+        if truncated:
             note = ws.cell(row=len(rows) + 3, column=1,
-                           value=f"Showing the first {MAX_ROWS_PER_SHEET} rows. "
-                                 f"Full data: {path.name}")
+                           value=f"Showing the first {MAX_ROWS_PER_SHEET} of "
+                                 f"{total} rows. Full data: {path.name}")
             note.font = self.muted_font
         return ws
 
@@ -385,9 +395,20 @@ def build(folder: Path, summary: dict, analysis: dict, site: str,
     bw.add_index(written)
 
     bw.save(out_path)
+
+    # An export with a header and no data rows gets no sheet, and loses nothing
+    # by being removed, so it counts as carried.
+    carried = dict(bw.carried)
+    for path in exports:
+        carried.setdefault(path.name, {
+            "sheet": None, "rows_written": 0, "rows_total": 0,
+            "columns": 0, "complete": True,
+        })
+
     return {
         "path": str(out_path),
         "sheets": len(bw.wb.sheetnames),
         "data_tables": len(written),
+        "carried": carried,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
     }

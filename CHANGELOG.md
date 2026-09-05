@@ -3,6 +3,40 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] — 2026-09-01
+
+### Added
+
+- **`build_report(consolidate=True)` leaves one master workbook instead of a
+  folder of loose CSVs.** A finished crawl drops around seventy exports that
+  nobody opens individually, and the workbook already carries every one of them
+  as its own sheet. With `consolidate` on, those exports are folded in and then
+  deleted, leaving `audit-workbook.xlsx`, the report files, and a
+  `consolidated.json` manifest naming which sheet holds which table.
+
+  The delete is earned, not assumed. Each sheet is written, the saved workbook
+  is **reopened from disk**, and every sheet is checked against the row count it
+  was supposed to hold. Only then does a file get removed. If the workbook fails
+  to save, fails to reopen, or comes back short, nothing is deleted and the
+  reason is reported.
+
+  An export the workbook had to sample — anything over `MAX_ROWS_PER_SHEET` —
+  is **kept on disk and named in the manifest**, because a partial sheet is not
+  a substitute for the file. A partial sheet now also states the true total
+  ("the first 5000 of 41902 rows") rather than only where it stopped.
+
+  Off by default. `read_export` and `aggregate_export` read those CSVs, so a
+  crawl you are still asking questions about should keep them; consolidate when
+  the folder is a finished deliverable.
+
+### Changed
+
+- **`list_exports`, `read_export`, `aggregate_export` and `build_report` explain
+  a consolidated folder** instead of reporting it as empty or missing. The
+  message names the workbook, when it was consolidated, how many tables it
+  carries, what is still on disk, and that a fresh crawl is what restores
+  row-by-row querying.
+
 ## [1.2.1] — 2026-08-31
 
 ### Fixed

@@ -15,6 +15,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import branding as B
+from . import consolidate as consolidation
 from . import workbook
 from .analysis import full_analysis, summarize
 
@@ -259,8 +260,12 @@ def html_report(summary: dict, analysis: dict, label: str) -> str:
 """
 
 
-def build(folder: Path, label: str = "") -> dict:
-    """Write report.md, report.html and analysis.json into the crawl folder."""
+def build(folder: Path, label: str = "", consolidate: bool = False) -> dict:
+    """Write report.md, report.html and analysis.json into the crawl folder.
+
+    consolidate  after the workbook is written and verified, delete the CSV
+                 exports it now carries in full, leaving one master workbook.
+    """
     summary_path = folder / "audit-summary.json"
     if summary_path.exists():
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
@@ -288,9 +293,9 @@ def build(folder: Path, label: str = "") -> dict:
     }
 
     # The master workbook: every export as its own styled, highlighted sheet.
+    book_path = folder / "audit-workbook.xlsx"
     try:
-        book = workbook.build(folder, summary, analysis, label,
-                              folder / "audit-workbook.xlsx")
+        book = workbook.build(folder, summary, analysis, label, book_path)
         result["workbook"] = book["path"]
         result["sheets"] = book["sheets"]
         result["data_tables"] = book["data_tables"]
@@ -298,4 +303,14 @@ def build(folder: Path, label: str = "") -> dict:
         result["workbook_error"] = (
             "openpyxl is not installed, so the workbook was skipped. "
             "pip install openpyxl")
+        return result
+
+    if consolidate:
+        # Never on the strength of "we think we wrote it": the saved file is
+        # reopened and checked before a single CSV is removed.
+        outcome = consolidation.run(folder, book_path, book["carried"])
+        result["consolidation"] = outcome
+        if not outcome["ok"]:
+            result["consolidation_note"] = (
+                f"Every export was kept — {outcome['reason']}.")
     return result

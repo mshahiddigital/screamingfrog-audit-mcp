@@ -36,9 +36,18 @@ Claude: Three high-priority problems. The big one: robots.txt disallows
 
 ## Install
 
-You need two things: **Python 3.10+** and the **Screaming Frog SEO Spider**
+Two prerequisites: **Python 3.10+** and the **Screaming Frog SEO Spider**
 installed on the same machine ([download](https://www.screamingfrog.co.uk/seo-spider/)).
-The free version is fine.
+The free version is fine — see [the free-tier situation](#the-free-tier-situation).
+
+Every setup below uses `uvx`, which downloads and runs the package on demand
+with no virtualenv to manage. It ships with
+[uv](https://docs.astral.sh/uv/getting-started/installation/):
+`curl -LsSf https://astral.sh/uv/install.sh | sh` (macOS/Linux) or
+`powershell -c "irm https://astral.sh/uv/install.ps1 | iex"` (Windows).
+
+Prefer pip? `pip install screamingfrog-audit-mcp`, then use
+`"command": "screamingfrog-audit-mcp"` with `"args": []` in any config below.
 
 ### Claude Code
 
@@ -46,7 +55,16 @@ The free version is fine.
 claude mcp add screaming-frog -- uvx screamingfrog-audit-mcp
 ```
 
-### Claude Desktop, Cursor, or any client with a JSON config
+Add `-s user` to make it available in every project rather than just this one.
+
+### Claude Desktop
+
+Settings → Developer → **Edit Config**, which opens `claude_desktop_config.json`:
+
+| OS | Path |
+|---|---|
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
 
 ```json
 {
@@ -59,29 +77,94 @@ claude mcp add screaming-frog -- uvx screamingfrog-audit-mcp
 }
 ```
 
-Config file locations:
+**Quit and reopen Claude Desktop** — it only reads that file at startup, and a
+window reload is not enough. The server then appears under the tools icon in
+the chat box.
 
-| Client | Path |
-|---|---|
-| Claude Desktop (macOS) | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| Claude Desktop (Windows) | `%APPDATA%\Claude\claude_desktop_config.json` |
-| Cursor | `~/.cursor/mcp.json` |
-
-Restart the client after editing. `uvx` comes with
-[uv](https://docs.astral.sh/uv/getting-started/installation/).
-
-### Prefer pip
+### Codex CLI
 
 ```bash
-pip install screamingfrog-audit-mcp
+codex mcp add screaming-frog -- uvx screamingfrog-audit-mcp
 ```
 
-Then use `"command": "screamingfrog-audit-mcp"` with `"args": []`.
+Check it with `codex mcp list`. That writes to `~/.codex/config.toml`, which you
+can also edit by hand — note TOML, not JSON, and `mcp_servers` with an
+underscore:
+
+```toml
+[mcp_servers.screaming-frog]
+command = "uvx"
+args = ["screamingfrog-audit-mcp"]
+```
+
+### Cursor
+
+Settings → MCP → **Add new global MCP server**, or edit `~/.cursor/mcp.json`
+directly. Same shape as Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "screaming-frog": {
+      "command": "uvx",
+      "args": ["screamingfrog-audit-mcp"]
+    }
+  }
+}
+```
+
+### VS Code (Copilot)
+
+`.vscode/mcp.json` for one workspace, or run **MCP: Open User Configuration**
+for every workspace. VS Code uses `servers`, not `mcpServers`:
+
+```json
+{
+  "servers": {
+    "screaming-frog": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["screamingfrog-audit-mcp"]
+    }
+  }
+}
+```
+
+### Any other MCP client
+
+It is a standard stdio server. Whatever the config shape, the command is
+`uvx` and the argument is `screamingfrog-audit-mcp`.
+
+### Optional settings
+
+Add these to the `env` block of any config (a `[mcp_servers.screaming-frog.env]`
+table in Codex):
+
+| Variable | What it does |
+|---|---|
+| `SCREAMING_FROG_PATH` | Path to the SEO Spider executable, if it is installed somewhere non-standard |
+| `SF_MCP_AUDIT_DIR` | Where crawl folders are written (default `~/.screamingfrog-audit-mcp/audits`) |
+| `SF_ALLOWED_DOMAINS` | Comma-separated domains this server may crawl. Set it for anything unattended |
+
+```json
+{
+  "mcpServers": {
+    "screaming-frog": {
+      "command": "uvx",
+      "args": ["screamingfrog-audit-mcp"],
+      "env": {
+        "SF_MCP_AUDIT_DIR": "/Users/you/audits",
+        "SF_ALLOWED_DOMAINS": "example.com,acme.co.uk"
+      }
+    }
+  }
+}
+```
 
 ### First run
 
 Ask your client: **"check my screaming frog install"**. It calls `check_install`,
-which reports the binary it found, your tier, and what that tier can do.
+which reports the binary it found, your licence tier, and what that tier can do.
 
 ### If the server won't start
 
@@ -89,12 +172,13 @@ An MCP server talks over stdio, so a startup failure shows up in your client as
 a dead server with no reason given. Run the preflight in a terminal instead:
 
 ```bash
-screamingfrog-audit-mcp --doctor
+uvx screamingfrog-audit-mcp --doctor
 ```
 
 It checks your Python version, the MCP SDK, whether the SEO Spider is found
-*and actually runs*, your licence tier, and whether the audit folder is
-writable — then prints a client config matching how this copy was installed.
+*and actually runs*, which command-line options your build supports, your
+licence tier, and whether the audit folder is writable — then prints a config
+matching how this copy was installed.
 
 ```
   [PASS] Python: Python 3.12.7 on Darwin
@@ -104,7 +188,9 @@ writable — then prints a client config matching how this copy was installed.
     or set SCREAMING_FROG_PATH to the executable.
 ```
 
-Running from `uvx`? Use `uvx screamingfrog-audit-mcp --doctor`.
+Common causes: `uvx` not on the client's PATH (use an absolute path to `uvx`,
+which `which uvx` will give you), or the config edited but the app not fully
+restarted.
 
 ## The free-tier situation
 
@@ -142,7 +228,7 @@ the same.
 | `aggregate_export` | **Counts and group-by without returning rows** — "how many 404s", "status codes by folder" — in one small response |
 | `storage_summary` | Disk used per saved crawl, largest first |
 | `delete_crawl` | Permanently delete a crawl folder (requires `confirm`) |
-| `build_report` | The branded deliverable: **`audit-workbook.xlsx`** (Summary, Issue register, Analysis, Data index, and every export as its own highlighted sheet), a printable `report.html`, `report.md` and `analysis.json` |
+| `build_report` | The branded deliverable: **`audit-workbook.xlsx`** (Summary, Issue register, Analysis, Data index, and every export as its own highlighted sheet), a printable `report.html`, `report.md` and `analysis.json`. `consolidate=True` folds the CSV exports into the workbook and deletes them, leaving one file |
 
 ## Two design decisions worth knowing
 
@@ -177,11 +263,31 @@ responses — so the problems are visible before you read a cell.
 
 Reports carry a credit line naming the tool and its author.
 
+### One workbook instead of seventy CSVs
+
+A finished crawl leaves around seventy exports in the folder, and the workbook
+already carries every one of them. `build_report(consolidate=True)` folds them
+in and deletes them, so the folder holds the workbook, the report files, and a
+`consolidated.json` manifest naming which sheet holds which table.
+
+The delete is earned. Each sheet is written, the saved workbook is **reopened
+from disk**, and every sheet is checked against the row count it should hold.
+Only then is a file removed. If the save fails, the reopen fails, or a sheet
+comes back short, nothing is deleted and the reason is reported. An export too
+large to carry in full is kept on disk and named in the manifest, because a
+sampled sheet is not a substitute for the file.
+
+It is off by default: `read_export` and `aggregate_export` read those CSVs. Turn
+it on when the folder is a finished deliverable rather than a crawl you are
+still asking questions about. Those tools then explain the consolidation and
+point at the workbook instead of reporting the folder as empty.
+
 ## Where crawls are stored
 
 `~/.screamingfrog-audit-mcp/audits/<label>/` by default. Each folder holds the raw
 Screaming Frog CSV exports, `audit-summary.json`, and whatever
-`build_report` wrote.
+`build_report` wrote — or, after a consolidated report, the workbook and
+manifest in place of those exports.
 
 Override with `SF_MCP_AUDIT_DIR`:
 
@@ -218,11 +324,8 @@ reports whether an allowlist is active.
 
 ### Environment variables
 
-| Variable | Purpose | Default |
-|---|---|---|
-| `SCREAMING_FROG_PATH` | Path to the SEO Spider executable | auto-discovered per platform |
-| `SF_MCP_AUDIT_DIR` | Where crawl folders are written | `~/.screaming-frog-mcp/audits` |
-| `SF_ALLOWED_DOMAINS` | Comma-separated domains this server may crawl | unset (no restriction) |
+All three are listed with examples under
+[Optional settings](#optional-settings) in the install section.
 
 ## Use it without MCP
 

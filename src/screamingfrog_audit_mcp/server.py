@@ -43,6 +43,7 @@ from .crawler import (FREE_URL_CAP, OPTIONAL_FLAGS, accepted_names,
                       missing_essentials, supported_flags)
 from .finder import ENV_BINARY, find_binary, install_hint, is_licensed
 from .jobs import Jobs
+from . import consolidate as consolidation
 from .report import build as build_report_files
 
 ENV_AUDIT_DIR = "SF_MCP_AUDIT_DIR"
@@ -69,6 +70,20 @@ def _slug(url: str) -> str:
 def _resolve(crawl: str) -> Path:
     p = Path(crawl).expanduser()
     return p.resolve() if p.is_absolute() else (AUDIT_ROOT / crawl).resolve()
+
+
+def _no_exports_reason(folder: Path, wanted: str = "") -> str:
+    """Why this folder has no CSVs, phrased so the next call is obvious."""
+    man = consolidation.manifest(folder)
+    if not man:
+        return ""
+    kept = ", ".join(k["file"] for k in man.get("kept", [])) or "none"
+    target = f"'{wanted}' and the other exports" if wanted else "The exports"
+    return (f"{target} in {folder.name} were consolidated into "
+            f"{man.get('workbook')} on {man.get('consolidated_at')} and deleted. "
+            f"{man.get('deleted_count')} tables live in that workbook now, one "
+            f"sheet each. Still on disk: {kept}. This tool reads CSVs, so crawl "
+            f"the site again if you need to query it row by row.")
 
 
 def _require_binary() -> Path:
@@ -449,6 +464,11 @@ def list_exports(crawl: str, contains: str = "") -> dict:
     folder = _resolve(crawl)
     if not folder.exists():
         raise ValueError(f"No such crawl: {folder.name}. Call list_crawls.")
+    if not any(folder.glob("*.csv")):
+        reason = _no_exports_reason(folder)
+        if reason:
+            return {"crawl": folder.name, "count": 0, "exports": [],
+                    "consolidated": True, "message": reason}
     rows = []
     for f in sorted(folder.glob("*.csv")):
         if contains and contains.lower() not in f.name.lower():
@@ -485,7 +505,8 @@ def read_export(crawl: str, export: str, columns: str = "", contains: str = "",
     name = export if export.endswith(".csv") else f"{export}.csv"
     path = folder / name
     if not path.exists():
-        raise ValueError(f"No export '{name}' in {folder.name}. Call list_exports first.")
+        raise ValueError(_no_exports_reason(folder, name) or
+                         f"No export '{name}' in {folder.name}. Call list_exports first.")
 
     limit = max(1, min(limit, MAX_ROWS))
     wanted = [c.strip() for c in columns.split(",") if c.strip()]
@@ -576,7 +597,8 @@ def aggregate_export(crawl: str, export: str, group_by: str,
     name = export if export.endswith(".csv") else f"{export}.csv"
     path = folder / name
     if not path.exists():
-        raise ValueError(f"No export '{name}' in {folder.name}. Call list_exports first.")
+        raise ValueError(_no_exports_reason(folder, name) or
+                         f"No export '{name}' in {folder.name}. Call list_exports first.")
 
     limit = max(1, min(limit, MAX_ROWS))
     match = _matcher(contains, mode)
@@ -693,7 +715,7 @@ def delete_crawl(crawl: str, confirm: bool = False) -> dict:
 # ── reporting ────────────────────────────────────────────────────────────────
 
 @server.tool()
-def build_report(crawl: str, label: str = "") -> dict:
+def build_report(crawl: str, label: str = "", consolidate: bool = False) -> dict:
     """Write the branded deliverable for a finished crawl into its folder.
 
     Produces four files:
@@ -712,14 +734,23 @@ def build_report(crawl: str, label: str = "") -> dict:
     print a page your browser already prints is a bad trade. Open the HTML and
     use Print to PDF; the stylesheet has print rules.
 
-    label  the audited business or site name shown on the report
+    label        the audited business or site name shown on the report
+    consolidate  true leaves ONE master workbook behind: each export is written
+                 to its own sheet, the saved workbook is reopened and checked
+                 row by row, and only then are the CSVs deleted, with a
+                 consolidated.json manifest recording what went where. Anything
+                 too large to carry in full is kept and named. Off by default,
+                 because read_export and aggregate_export need those CSVs — turn
+                 it on when the folder is a finished deliverable rather than a
+                 crawl you are still asking questions about.
     """
     folder = _resolve(crawl)
     if not folder.exists():
         raise ValueError(f"No such crawl: {folder.name}. Call list_crawls.")
     if not any(folder.glob("*.csv")):
-        raise ValueError(f"{folder.name} contains no exports to report on.")
-    return build_report_files(folder, label)
+        raise ValueError(_no_exports_reason(folder) or
+                         f"{folder.name} contains no exports to report on.")
+    return build_report_files(folder, label, consolidate=consolidate)
 
 
 def main() -> None:
